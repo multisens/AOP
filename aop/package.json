@@ -7,6 +7,9 @@
     "start": "node ./src/server.js"
   },
   "author": "Joel dos Santos",
+  "contributors": [
+    "Rodrigo da Mota Sodré"
+  ],
   "license": "Apache-2.0",
   "description": "Application-oriented Platform",
   "dependencies": {

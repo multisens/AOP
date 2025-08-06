@@ -8,6 +8,9 @@
     "dev": "nodemon --exec ts-node src/server.ts"
   },
   "author": "Joel dos Santos",
+  "contributors": [
+    "Rodrigo da Mota Sodré"
+  ],
   "license": "Apache-2.0",
   "description": "TV 3.0 Ginga CC WebServices",
   "dependencies": {

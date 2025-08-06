@@ -26,14 +26,12 @@
   <body>
     <video id="tvvideo"
            style="z-index: 1; left: 0; top: 0; width: 100%; height: 100%; position: absolute;"
+           src="<%= mainVideoURL %>"
            autoplay muted playsinline></video>
 
     <script>
       window.addEventListener('message', receiveFrameMessage);
       postFrameMessage({ type: 'loaded' });
-
-      const video = document.getElementById('tvvideo');
-      createHLSPlayer('<%= mainVideoURL %>', video);
 
       <%- script %>      
     </script>

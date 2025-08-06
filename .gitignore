@@ -1,0 +1,7 @@
+node_modules
+
+apps/public/media/cefet/stream
+
+dist
+
+.env
