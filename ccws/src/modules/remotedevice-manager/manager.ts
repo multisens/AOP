@@ -51,10 +51,15 @@ function removeRemoteDevice(handle: string): boolean {
   if (!devices.has(handle)) return false;
 
   const dev = devices.get(handle);
+  let devclass = dev?.getClass() as string;
   dev?.terminate();
 
   devices.delete(handle);
+  let handles: string[] = devclasses.get(devclass) as string[];
+  devclasses.set(devclass, handles.filter(h => h !== handle));
   console.log(`Client ${handle} unregistered.`);
+
+  mqttClient.publish(`${TOPICS.devices}/${devclass}`, JSON.stringify(devclasses.get(devclass)), true);
   return true;
 }
 
