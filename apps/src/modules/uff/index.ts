@@ -189,9 +189,9 @@ router.get("/", (req: Request, res: Response) => {
     name: "UFF TV",
     details:
       '<img id="details" style="left: 4%; top: 40%; width: 96%; height: 23%;" src="/media/uff/details.png"/>',
-    backMove: 'moveup="connect"',
+    backMove: 'moveup="tvvideo"',
     usermove: 'movedown="tvvideo"',
-    mainVideoMove: 'moveup="user" movedown="connect"',
+    mainVideoMove: 'moveup="user" movedown="back"',
     info: info_url,
     mainVideoURL: video_url,
     script: handleUserUpdate + fullscreen,
