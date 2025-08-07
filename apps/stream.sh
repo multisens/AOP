@@ -3,6 +3,7 @@ path=$(dirname $1)
 file=$(basename $1)
 stream_out="${path}/stream/${file%.*}.m3u8"
 
+mkdir -p "${path}/stream"
 echo "Streaming video ${file} into stream ${stream_out}"
 
 # FFmpeg options:
