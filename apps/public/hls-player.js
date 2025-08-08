@@ -8,6 +8,15 @@ function createHLSPlayer(url, elm) {
         hls.loadSource(url);
         hls.attachMedia(elm);
 
+        hls.on(Hls.Events.FRAG_CHANGED, (event, data) => {
+            if (typeof handleFragChange === 'function') {
+                let segname = data.frag.url.split("/").pop();
+                segname = segname.split("_")[0];
+
+                handleFragChange(data.frag.sn, segname);
+            }
+        });
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             elm.play().catch(e => console.error('Erro no autoplay:', e));
         });

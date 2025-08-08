@@ -41,6 +41,15 @@ function receiveFrameMessage(e) {
 
 
 function back() {
+    if (typeof beforeBack === 'function') {
+        beforeBack();
+    }
+
+    postFrameMessage({
+        type: 'save',
+        name: 'currentService',
+        value: ''
+    });
     postFrameMessage({
         type: 'load',
         dest: 'dtv'
