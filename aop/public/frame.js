@@ -90,7 +90,7 @@ function HandleMessage(t, m) {
     if (t == DATA.topics.current_user) {
         DATA.environment.aop.currentUser = m.toString();
     }
-    else if (t == DATA.topics.current_service) {
+    else if (t == DATA.topics.current_service && m != '') {
         let sid = parseInt(m.toString());
         DATA.environment.aop.currentService = sid;
         if (DATA.frame !== undefined && DATA.services !== undefined) {
