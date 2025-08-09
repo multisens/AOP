@@ -14,7 +14,13 @@ const client:MqttClient = mqtt.connect(brokerUrl, {
 export const TOPIC = {
     users: 'aop/users',
     current_user: 'aop/currentUser',
-    services: 'aop/services'
+    services: 'aop/services',
+    current_service: 'aop/currentService',
+    current_app: 'aop/:serviceId/currentApp',
+    app_path: 'aop/:serviceId/:appId/path',
+    app_nodes: 'aop/:serviceId/:appId/doc/nodes',
+    app_doc: 'aop/:serviceId/:appId/doc',
+    devices: 'aop/devices'
 }
 
 type TopicHandler = {
@@ -56,4 +62,19 @@ export function addTopicHandler(t:string, f:TopicHandler) {
 
 export function publish(t:string, m:string, r = true) {
     client.publish(t, m, { retain : r });
+}
+
+
+export function parseTopic(topic: string, params: Record<string, string>): string {
+    let parts = topic.split('/');
+    for (let i = 0; i < parts.length; i++) {
+        if (parts[i].startsWith(':')) {
+            let key = parts[i].substring(1);
+            if (key in params) {
+                parts[i] = params[key];
+            }
+        }
+    }
+
+    return parts.join('/');
 }
