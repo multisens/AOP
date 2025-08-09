@@ -347,6 +347,8 @@ export default class RemoteDevice {
   }
 
   public setNode(node: AppNode): void {
+    console.log(`Associating node ${node.id} to device ${this.handle}.`);
+
     this.node = node;
 
     this.topic_prefix = mqttClient.parseTopic(TOPICS.app_doc, {
@@ -356,27 +358,32 @@ export default class RemoteDevice {
     let ids = node.id.split(".");
     this.topic_prefix += `/${ids.join("/")}`;
 
-    mqttClient.addTopicHandler(
-      `${this.topic_prefix}/interfaces`,
-      this.setNodeInterfaces
-    );
-    mqttClient.addTopicHandler(
-      `${this.topic_prefix}/+/actionNotification`,
-      this.onMqttMessage
-    );
-    mqttClient.addTopicHandler(
-      `${this.topic_prefix}/+/+/actionNotification`,
-      this.onMqttMessage
-    );
+    mqttClient.addTopicHandler(`${this.topic_prefix}/interfaces`, this.setNodeInterfaces.bind(this));
+
+    mqttClient.addTopicHandler(`${this.topic_prefix}/preparationEvent/actionNotification`, this.onMqttMessage.bind(this));
+    mqttClient.addTopicHandler(`${this.topic_prefix}/presentationEvent/actionNotification`, this.onMqttMessage.bind(this));
+
+    // mqttClient.addTopicHandler(`${this.topic_prefix}/+/+/actionNotification`, this.onMqttMessage);
     this.subscribed = true;
+  }
+
+  public removeNode(): void {
+    console.log(`Disassociating node ${this.node?.id} to device ${this.handle}.`);
+
+    mqttClient.removeTopicHandler(`${this.topic_prefix}/interfaces`, this.setNodeInterfaces.bind(this));
+    
+    mqttClient.removeTopicHandler(`${this.topic_prefix}/preparationEvent/actionNotification`, this.onMqttMessage.bind(this));
+    mqttClient.removeTopicHandler(`${this.topic_prefix}/presentationEvent/actionNotification`, this.onMqttMessage.bind(this));
+
+    // mqttClient.removeTopicHandler(`${this.topic_prefix}/+/+/actionNotification`, this.onMqttMessage);
+    this.subscribed = false;
+    this.node = undefined;
+    this.topic_prefix = ''
   }
 
   protected setNodeInterfaces(interfaces: string): void {
     let ifaces: NodeInterface[] = JSON.parse(interfaces);
-    mqttClient.removeTopicHandler(
-      `${this.topic_prefix}/interfaces`,
-      this.setNodeInterfaces
-    );
+    mqttClient.removeTopicHandler(`${this.topic_prefix}/interfaces`, this.setNodeInterfaces.bind(this));
 
     this.interfaceIds = [];
     this.properties.clear();
@@ -384,10 +391,7 @@ export default class RemoteDevice {
       this.interfaceIds?.push(iface.id);
 
       if (iface.type == InterfaceType.property) {
-        mqttClient.addTopicHandler(
-          `${this.topic_prefix}/${iface.id}/attributionEvent/value`,
-          this.setPropertyValue
-        );
+        mqttClient.addTopicHandler(`${this.topic_prefix}/${iface.id}/attributionEvent/value`, this.setPropertyValue.bind(this));
       }
     });
   }
@@ -401,7 +405,7 @@ export default class RemoteDevice {
 
     this.properties.set(ifaceId, m);
 
-    mqttClient.removeTopicHandler(t, this.setPropertyValue);
+    mqttClient.removeTopicHandler(t, this.setPropertyValue.bind(this));
   }
 
   protected parseProperties(): PropertiesType {
@@ -423,15 +427,7 @@ export default class RemoteDevice {
     }
     this.wss.close();
     if (this.subscribed) {
-      mqttClient.removeTopicHandler(
-        `${this.topic_prefix}/+/actionNotification`,
-        this.onMqttMessage
-      );
-      mqttClient.removeTopicHandler(
-        `${this.topic_prefix}/+/+/actionNotification`,
-        this.onMqttMessage
-      );
-      this.subscribed = false;
+      this.removeNode();
     }
   }
 }

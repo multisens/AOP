@@ -3,13 +3,7 @@ import mqttClient, { TOPICS } from "../../mqtt-client";
 import { ReqBody } from "../remotedevice-api/service";
 import RemoteDevice, { AppNode } from "./remote-device";
 import { WebSocketServer } from "ws";
-import {
-  CapabilitiesMetadata,
-  DeviceCapabilities,
-  Locator,
-  PreparationTime,
-  State,
-} from "./types";
+import { CapabilitiesMetadata } from "./types";
 
 const devices = new Map<string, RemoteDevice>();
 const devclasses = new Map<string, string[]>();
@@ -25,11 +19,13 @@ function associateAppNodes() {
   });
 }
 
-function addRemoteDevice(
-  body: ReqBody,
-  handle: string,
-  wss: WebSocketServer
-): void {
+function disassociateAppNodes() {
+  devices.forEach((dev) => {
+    dev.removeNode();
+  });
+}
+
+function addRemoteDevice(body: ReqBody, handle: string, wss: WebSocketServer): void {
   let device = new RemoteDevice(body, handle, wss);
   devices.set(handle, device);
 
@@ -110,6 +106,7 @@ function requestDeviceCapabilities(handle: string): CapabilitiesMetadata[] {
 
 export {
   associateAppNodes,
+  disassociateAppNodes,
   addRemoteDevice,
   removeRemoteDevice,
   getDevicesByClass,

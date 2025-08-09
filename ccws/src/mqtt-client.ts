@@ -50,11 +50,12 @@ client.on('message', (topic, message) => {
 function addTopicHandler(t: string, f: TopicHandler): void {
     if (TOPIC_HANDLER.has(t)) {
         TOPIC_HANDLER.get(t)?.push(f);
+        console.log(`Added handler to topic ${t}`);
     }
     else {
         TOPIC_HANDLER.set(t, [f]);
         client.subscribe(t, { qos : 1, nl : true }); 
-        console.log(`Subscribed to topic ${t}`);
+        console.log(`Subscribed handler to topic ${t}`);
     }
 }
 
