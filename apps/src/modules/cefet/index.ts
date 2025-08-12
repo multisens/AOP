@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 import express, { Router, Request, Response } from 'express';
 import * as mqttClient from '../../mqtt-client';
-import ncl_app from './app-data';
+import * as ncl_app from './app-data';
 import NclApp from './ncl-app';
 dotenv.config();
 const router:Router = express.Router();
@@ -52,7 +52,7 @@ router.get('/', (req:Request, res:Response) => {
         DATA.current_app?.terminate();
     }
     else {
-        DATA.current_app = ncl_app(DATA.serviceId);
+        DATA.current_app = new NclApp('100', String(DATA.serviceId), ncl_app.app_path, structuredClone(ncl_app.doc));
         mqttClient.publish(topic.currentApp, DATA.current_app.id, true);
     }
 

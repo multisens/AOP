@@ -401,5 +401,7 @@ export default class NclApp {
         this.publications.forEach((pub) => {
             mqttClient.publish(pub, '', false);
         });
+        this.parsed = false;
+        this.started = false;
     }
 }

@@ -1,7 +1,7 @@
 import NclApp, { nclContext } from './ncl-app';
 
-let app_path = '/Users/joel/Coding/GingaDistrib/carnaval';
-let doc:nclContext = {
+export let app_path = '/Users/joel/Coding/GingaDistrib/carnaval';
+export let doc:nclContext = {
     id: 'body',
     ports: [
         {
@@ -17,7 +17,3 @@ let doc:nclContext = {
         }
     ]
 };
-
-export default (sid: number) => {
-    return new NclApp('100', String(sid), app_path, doc);
-}
