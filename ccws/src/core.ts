@@ -124,6 +124,8 @@ function currentService(sid: string): void {
   data.app.id = "";
   data.app.url = "";
   data.app.nodes = [];
+  data.current.serviceId = data.services[Number(sid)]?.serviceId;
+  data.current.serviceName = data.services[Number(sid)]?.serviceName;
 }
 
 mqttClient.addTopicHandler(TOPICS.current_service, currentService);
