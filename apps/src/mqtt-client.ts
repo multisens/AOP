@@ -19,11 +19,11 @@ export const TOPIC = {
     current_app: 'aop/:serviceId/currentApp',
     app_path: 'aop/:serviceId/:appId/path',
     app_nodes: 'aop/:serviceId/:appId/doc/nodes',
-    app_doc: 'aop/:serviceId/:appId/doc',
+    app_prefix: 'aop/:serviceId/:appId',
     devices: 'aop/devices'
 }
 
-type TopicHandler = {
+export type TopicHandler = {
     (m:string): void;
 };
 const TOPIC_HANDLER = new Map<string, TopicHandler[]>();
@@ -56,6 +56,33 @@ export function addTopicHandler(t:string, f:TopicHandler) {
         TOPIC_HANDLER.set(t, [f]);
         client.subscribe(t, { qos : 1, nl : true }); 
         console.log(`Subscribed to topic ${t}`);
+    }
+}
+
+
+export function removeTopicHandler(t: string, f: TopicHandler): void {
+    if (!TOPIC_HANDLER.has(t)) {
+        console.log(`Topic ${t} not found in handlers`);
+        return;
+    }
+
+    let handlers = TOPIC_HANDLER.get(t)!;
+    let index = handlers.findIndex(handler => handler.toString() === f.toString());
+    
+    if (index === -1) {
+        console.log(`Handler not found for topic ${t}`);
+        return;
+    }
+
+    handlers.splice(index, 1);
+
+    if (handlers.length === 0) {
+        TOPIC_HANDLER.delete(t);
+        client.unsubscribe(t);
+        console.log(`Unsubscribed from topic ${t} (no more handlers)`);
+    } else {
+        TOPIC_HANDLER.set(t, handlers);
+        console.log(`Handler removed from topic ${t}, ${handlers.length} remaining`);
     }
 }
 
