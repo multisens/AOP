@@ -47,10 +47,7 @@ export default class RemoteDevice {
   protected supportedTypes: string[];
   protected capabilities: DeviceCapabilities[];
 
-  // ?
   protected ws?: WebSocket;
-
-  // WebSocket entre o RDM e o Remote Device
   protected wss: WebSocketServer;
 
   protected subscribed: boolean;
@@ -59,7 +56,6 @@ export default class RemoteDevice {
   protected interfaceIds?: string[];
   protected properties: Map<string, string>;
 
-  // Binding this for all methods that use it
 
   constructor(body: ReqBody, handle: string, wss: WebSocketServer) {
     this.deviceClass = body.deviceClass;
@@ -113,10 +109,9 @@ export default class RemoteDevice {
     }
   }
 
-  protected sendWebSocketMessage(
-    data: NodeMetadata | ActionMetadata | ControlMetadata
-  ) {
+  protected sendWebSocketMessage(data: NodeMetadata | ActionMetadata | ControlMetadata) {
     if (this.ws) {
+      console.log(`Sendind message to client ${this.handle}\n ${JSON.stringify(data, null, 4)}\n\n`)
       this.ws.send(JSON.stringify(data));
     } else {
       // TODO: store message for later
@@ -238,11 +233,7 @@ export default class RemoteDevice {
     return result;
   }
 
-  protected parseInterface(
-    parts: string[],
-    m: string,
-    result: Record<string, string>
-  ): void {
+  protected parseInterface(parts: string[], m: string, result: Record<string, string>): void {
     let part: string = parts.shift() as string;
 
     if (!this.interfaceIds?.includes(part)) {
@@ -254,11 +245,7 @@ export default class RemoteDevice {
     this.parseEvent(parts, m, result);
   }
 
-  protected parseEvent(
-    parts: string[],
-    m: string,
-    result: Record<string, string>
-  ): void {
+  protected parseEvent(parts: string[], m: string, result: Record<string, string>): void {
     let part: string = parts.shift() as string;
 
     if (!part.includes("Event")) {
@@ -280,11 +267,7 @@ export default class RemoteDevice {
     }
   }
 
-  protected parseKey(
-    parts: string[],
-    m: string,
-    result: Record<string, string>
-  ): void {
+  protected parseKey(parts: string[], m: string, result: Record<string, string>): void {
     let part: string = parts.shift() as string;
 
     result["key"] = part;
@@ -292,11 +275,7 @@ export default class RemoteDevice {
     this.parseAction(parts, m, result);
   }
 
-  protected parseAction(
-    parts: string[],
-    m: string,
-    result: Record<string, string>
-  ): void {
+  protected parseAction(parts: string[], m: string, result: Record<string, string>): void {
     let part: string = parts.shift() as string;
 
     if (!part.match("actionNotification")) {
@@ -318,18 +297,15 @@ export default class RemoteDevice {
     return this.handle;
   }
 
-  // ? Verify
   public getSupportedTypes(): string[] {
     return this.supportedTypes;
   }
 
-  // ? Verify
   public getUrl(): string {
     if (!this.wss) return "";
     return `ws://${core.app.url}:${this.wss.options.port}`;
   }
 
-  // ? Verify
   public getCapabilities(): DeviceCapabilities[] {
     if (!this.capabilities) {
       return [];

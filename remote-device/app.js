@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Configurações iniciais
     serverUrlInput.value = currentServerUrl;
-    deviceClassInput.value = 'Guarana';
+    deviceClassInput.value = 'guarana';
 
     // Configurar o toggle
     let configVisible = true;
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         // Fazer a chamada REST
-        fetch(`${currentServerUrl}/dtv/remote-device`, {
+        fetch(`${currentServerUrl}/tv3/remote-device`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

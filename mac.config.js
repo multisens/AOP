@@ -38,22 +38,6 @@ module.exports = {
             }
         },
         {
-            name        : 'stream-flower',
-            cwd         : './apps',
-            interpreter : '/bin/bash',
-            autorestart : false,
-            script      : './stream.sh',
-            args        : 'public/media/cefet/flowerVideo.mp4'
-        },
-        {
-            name        : 'stream-sea',
-            cwd         : './apps',
-            interpreter : '/bin/bash',
-            autorestart : false,
-            script      : './stream.sh',
-            args        : 'public/media/cefet/seaVideo.mp4'
-        },
-        {
             name        : 'tv3ws',
             cwd         : './ccws',
             script      : 'npm',
@@ -67,20 +51,6 @@ module.exports = {
                 USER_DATA_FILE  : '/Users/joel/Coding/GingaDistrib/user-files/userData.json',
                 USER_THUMBS     : '/Users/joel/Coding/GingaDistrib/user-files/thumbs'
             }
-        },
-        {
-            name        : 'topic-explorer',
-            interpreter : '/bin/bash',
-            autorestart : false,
-            script      : './start-chrome.sh',
-            args        : './mqtt-explorer/index.html'
-        },
-        {
-            name        : 'remote-device',
-            interpreter : '/bin/bash',
-            autorestart : false,
-            script      : './start-chrome.sh',
-            args        : './remote-device/index.html'
         }
     ]
 }
