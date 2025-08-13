@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <title><%= pageTitle %></title>
+    <style>
+      body {
+        font-family: sans-serif;
+        text-align: center;
+        padding: 20px;
+        background-color: #333;
+        color: white;
+        margin: 0;
+      }
+      #game-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 90vh;
+      }
+      #answers-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        width: 95%;
+        max-width: 800px;
+      }
+      .answer-btn {
+        height: 150px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 3em;
+        color: white;
+      }
+      .feedback {
+        font-size: 3em;
+        font-weight: bold;
+      }
+      .correct {
+        color: #2ecc71;
+      }
+      .incorrect {
+        color: #e74c3c;
+      }
+      #countdown {
+        font-size: 4em;
+        font-weight: bold;
+        color: #f1c40f;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <h2>
+        Você está na sala: <span style="color: #3498db"><%= roomId %></span>
+      </h2>
+      <div id="countdown-container">
+        <p>Aguardando o início...</p>
+      </div>
+    </div>
+
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+      const roomId = "<%= roomId %>";
+      const socket = io("<%= logicServerUrl %>");
+      const gameContainer = document.getElementById("game-container");
+      const colors = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f"];
+
+      socket.on("connect", () => {
+        socket.emit("joinRoom", { roomId, isPresenter: false });
+      });
+
+      socket.on("joined", (message) => {
+        console.log(message);
+      });
+
+      socket.on("startCountdown", (duration) => {
+        const countdownContainer = document.getElementById(
+          "countdown-container"
+        );
+        let timeLeft = duration;
+        countdownContainer.innerHTML = `<h2>O quiz começa em:</h2><div id="countdown">${timeLeft}</div>`;
+        const countdownInterval = setInterval(() => {
+          timeLeft--;
+          const countdownEl = document.getElementById("countdown");
+          if (countdownEl) {
+            countdownEl.innerText = timeLeft;
+          }
+          if (timeLeft <= 0) {
+            clearInterval(countdownInterval);
+            countdownContainer.innerHTML =
+              "<h2>Prepare-se! Olhe para a tela principal para acompanhar!</h2>";
+          }
+        }, 1000);
+      });
+
+      socket.on("quiz:showAnswerOptions", (question) => {
+        gameContainer.innerHTML = '<div id="answers-grid"></div>';
+        const answersGrid = document.getElementById("answers-grid");
+
+        for (let i = 0; i < question.options.length; i++) {
+          const button = document.createElement("button");
+          button.className = "answer-btn";
+          button.style.backgroundColor = colors[i % colors.length];
+          button.onclick = () => submitAnswer(i);
+          answersGrid.appendChild(button);
+        }
+      });
+
+      function submitAnswer(index) {
+        socket.emit("player:submitAnswer", { roomId, answerIndex: index });
+        gameContainer.innerHTML =
+          "<h2>Resposta enviada! Aguardando resultado...</h2>";
+      }
+
+      socket.on("quiz:feedback", ({ correct }) => {
+        if (correct) {
+          gameContainer.innerHTML = '<h1 class="feedback correct">CERTO!</h1>';
+        } else {
+          gameContainer.innerHTML =
+            '<h1 class="feedback incorrect">ERRADO!</h1>';
+        }
+      });
+
+      socket.on("quiz:endQuestion", () => {
+        gameContainer.innerHTML =
+          "<h2>Tempo esgotado! Prepare-se para a próxima...</h2>";
+      });
+
+      socket.on("quizEnded", (message) => {
+        gameContainer.innerHTML = `<h1>${message.message || message}</h1>`;
+      });
+
+      socket.on("error", (message) => {
+        gameContainer.innerHTML = `<h2 style="color: #e74c3c">Erro: ${message}</h2>`;
+      });
+    </script>
+  </body>
+</html>

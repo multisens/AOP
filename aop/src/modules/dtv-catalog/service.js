@@ -17,6 +17,7 @@ async function content(views) {
 	return await ejs.renderFile(`${views}/dtv-catalog.ejs`,
 		{
 			movedown: 'app0',
+			moveleft: 'app0',
 			content: await cards(views)
 		});
 }
