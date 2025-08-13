@@ -5,5 +5,5 @@
 if [[ "$(uname)" == "Darwin" ]]; then
   open -a "Google Chrome" $1
 else
-  google-chrome-stable $1
+  google-chrome $1 --kiosk --new-window
 fi
