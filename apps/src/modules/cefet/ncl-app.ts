@@ -291,6 +291,15 @@ export default class NclApp {
     }
 
 
+    private generateLink(t: string, cond_evt: string, cond_trn: string, act_evt: string, act_trn: string): void {
+        this.subscribe(`${t}/${cond_evt}/eventNotification`, (m) => {
+            if (m == cond_trn) {
+                this.publish(`${t}/${act_evt}/actionNotification`, act_trn, false);
+            }
+        });
+    }
+
+
     private generateStateMachine(t: string): void {
         this.publish(`${t}/state`, 'sleeping', true);
         this.publish(`${t}/occurrences`, '0', true);
@@ -310,6 +319,9 @@ export default class NclApp {
         // event data
         this.generateStateMachine(`${prefix}/preparationEvent`);
         this.generateStateMachine(`${prefix}/presentationEvent`);
+
+        // link between preparation and presentation
+        this.generateLink(prefix, 'preparationEvent', 'stops', 'presentationEvent', 'start');
 
         // interfaces data
         let ifaces: interfaceData[] = [];
@@ -392,6 +404,14 @@ export default class NclApp {
         // Prepare all nodes in the app
         this.prepareContext(this.doc, `${this.topic_prefix}/doc`);
     }
+
+
+    public stopApp() {
+        this.doc.medias?.forEach(m => {
+            let t = `${this.topic_prefix}/doc/${m.id}`;
+            this.publish(`${t}/presentationEvent/actionNotification`, 'stop', false);
+        });
+    }
     
 
     public terminate(): void {
@@ -399,7 +419,7 @@ export default class NclApp {
             mqttClient.removeTopicHandler(sub[0], sub[1]);
         });
         this.publications.forEach((pub) => {
-            mqttClient.publish(pub, '', false);
+            mqttClient.publish(pub, '', true);
         });
         this.parsed = false;
         this.started = false;

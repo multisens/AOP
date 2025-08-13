@@ -13,7 +13,7 @@ export let doc:nclContext = {
         {
             id: 'bateria',
             type: 'application/x-ncl360',
-            src: 'granderio360.mp4'
+            src: 'bateria.ncl360'
         }
     ]
 };

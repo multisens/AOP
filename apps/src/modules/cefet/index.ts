@@ -11,7 +11,7 @@ type mydata = {
     serviceId: number,
     serviceName: string,
     svgLogo: string,
-    current_app?: NclApp
+    current_app?: NclApp | null
 };
 export const DATA:mydata = {
     serviceId: 0,
@@ -48,10 +48,12 @@ function handleKey(k) {
 
 
 router.get('/', (req:Request, res:Response) => {
-    if (req.query.prev == 'fullscreen') {
+    if (req.query.prev == 'fullscreen' && DATA.current_app != null) {
+        DATA.current_app?.stopApp();
         DATA.current_app?.terminate();
+        DATA.current_app = null;
     }
-    else {
+    if (req.query.prev != 'fullscreen' && DATA.current_app == null) {
         DATA.current_app = new NclApp('100', String(DATA.serviceId), ncl_app.app_path, structuredClone(ncl_app.doc));
         mqttClient.publish(topic.currentApp, DATA.current_app.id, true);
     }

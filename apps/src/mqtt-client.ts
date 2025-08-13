@@ -24,7 +24,7 @@ export const TOPIC = {
 }
 
 export type TopicHandler = {
-    (m:string): void;
+    (m: string, t?: string): void;
 };
 const TOPIC_HANDLER = new Map<string, TopicHandler[]>();
 
@@ -39,7 +39,7 @@ client.on('message', (topic, message) => {
 
     if (TOPIC_HANDLER.has(topic)) {
         TOPIC_HANDLER.get(topic)?.forEach(f => {
-            f(message.toString());
+            f(message.toString(), topic);
         });
     }
     else {
@@ -51,11 +51,12 @@ client.on('message', (topic, message) => {
 export function addTopicHandler(t:string, f:TopicHandler) {
     if (TOPIC_HANDLER.has(t)) {
         TOPIC_HANDLER.get(t)?.push(f);
+        console.log(`Added handler to topic ${t}`);
     }
     else {
         TOPIC_HANDLER.set(t, [f]);
         client.subscribe(t, { qos : 1, nl : true }); 
-        console.log(`Subscribed to topic ${t}`);
+        console.log(`Subscribed handler to topic ${t}`);
     }
 }
 
@@ -87,7 +88,7 @@ export function removeTopicHandler(t: string, f: TopicHandler): void {
 }
 
 
-export function publish(t:string, m:string, r = true) {
+export function publish(t: string, m: string, r :boolean = true) {
     client.publish(t, m, { retain : r });
 }
 
