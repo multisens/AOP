@@ -36,11 +36,7 @@ function addRemoteDevice(body: ReqBody, handle: string, wss: WebSocketServer): v
     devclasses.set(devclass, [device.getHandle()]);
   }
 
-  mqttClient.publish(
-    `${TOPICS.devices}/${devclass}`,
-    JSON.stringify(devclasses.get(devclass)),
-    true
-  );
+  mqttClient.publish(`${TOPICS.devices}/${devclass}`, JSON.stringify(devclasses.get(devclass)), true);
 }
 
 function removeRemoteDevice(handle: string): boolean {
@@ -55,7 +51,12 @@ function removeRemoteDevice(handle: string): boolean {
   devclasses.set(devclass, handles.filter(h => h !== handle));
   console.log(`Client ${handle} unregistered.`);
 
-  mqttClient.publish(`${TOPICS.devices}/${devclass}`, JSON.stringify(devclasses.get(devclass)), true);
+  let content = '';
+  handles = devclasses.get(devclass) as string[];
+  if (handles.length > 0) {
+    content = JSON.stringify(handles);
+  }
+  mqttClient.publish(`${TOPICS.devices}/${devclass}`, content, true);
   return true;
 }
 
