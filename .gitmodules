@@ -1,3 +1,6 @@
 [submodule "eduplay"]
 	path = eduplay
 	url = https://github.com/motadv/eduplay.git
+[submodule "sepe"]
+	path = sepe
+	url = https://github.com/motadv/se-presentation-engine.git
