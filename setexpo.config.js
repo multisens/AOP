@@ -68,7 +68,7 @@ module.exports = {
             args: "http://localhost:8080",
         },
         {
-            name: "eduplay-server",
+            name: "eduplay",
             cwd: "./eduplay",
             interpreter: "none",
             script: "/bin/bash",
