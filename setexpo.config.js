@@ -3,7 +3,7 @@ module.exports = {
         {
             name: 'broker',
             script: '/usr/sbin/mosquitto',
-            args: '-c /home/dell-g15-1/Documentos/SetExpo/GingaDistrib/mosquitto/mosquitto.conf',
+            args: '-c ./mosquitto/mosquitto.conf',
             interpreter: 'none',
             wait_ready: true,
             autorestart: false
@@ -26,9 +26,9 @@ module.exports = {
         {
             name: 'apps',
             cwd: './apps',
-            script: 'npm',
-            args: 'start',
-            interpreter: 'none',
+            interpreter: "none",
+            script: "/bin/bash",
+            args: '-c "npm run build && npm start"',
             wait_ready: true,
             autorestart: false,
             env: {
@@ -41,9 +41,9 @@ module.exports = {
         {
             name: 'tv3ws',
             cwd: './ccws',
-            script: 'npm',
-            args: 'start',
-            interpreter: 'none',
+            interpreter: "none",
+            script: "/bin/bash",
+            args: '-c "npm run build && npm start"',
             wait_ready: true,
             env: {
                 PORT: 44642,
@@ -70,9 +70,17 @@ module.exports = {
         {
             name: "eduplay-server",
             cwd: "./eduplay",
-            script: "npm",
-            args: "start",
             interpreter: "none",
+            script: "/bin/bash",
+            args: '-c "npm run build && npm start"',
+            wait_ready: true,
+        },
+        {
+            name: "sepe",
+            cwd: "./sepe",
+            interpreter: "none",
+            script: "/bin/bash",
+            args: '-c "npm run build && npm start"',
             wait_ready: true,
         }
     ]
