@@ -67,5 +67,13 @@ module.exports = {
             script: "./start-chrome.sh",
             args: "http://localhost:8080",
         },
+        {
+            name: "eduplay-server",
+            cwd: "./eduplay",
+            script: "npm",
+            args: "start",
+            interpreter: "none",
+            wait_ready: true,
+        }
     ]
 }
