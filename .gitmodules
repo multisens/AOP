@@ -1,0 +1,3 @@
+[submodule "eduplay"]
+	path = eduplay
+	url = https://github.com/motadv/eduplay.git
