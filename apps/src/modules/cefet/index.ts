@@ -1,6 +1,8 @@
 import * as dotenv from 'dotenv';
 import express, { Router, Request, Response } from 'express';
+import { readFileSync } from 'fs';
 import * as mqttClient from '../../mqtt-client';
+import { join } from 'path';
 import * as ncl_app from './app-data';
 import NclApp from './ncl-app';
 dotenv.config();
@@ -45,6 +47,7 @@ function handleKey(k) {
         window.location.href = '/cefet?prev=fullscreen';
     }
 }`;
+const videosync = readFileSync(join(__dirname, 'handleFragChange.js'), 'utf-8');
 
 
 router.get('/', (req:Request, res:Response) => {
@@ -78,7 +81,7 @@ router.get('/fullscreen', (req:Request, res:Response) => {
 
     res.render('fullscreen', {
         mainVideoURL: '',
-        script: executeVideo + fullscreenScript
+        script: executeVideo + fullscreenScript + videosync
     });
 });
 

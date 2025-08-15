@@ -15,7 +15,9 @@
     "dotenv": "^16.5.0",
     "ejs": "^3.1.10",
     "express": "^5.1.0",
-    "mqtt": "^5.13.0"
+    "fs": "^0.0.1-security",
+    "mqtt": "^5.13.0",
+    "path": "^0.12.7"
   },
   "devDependencies": {
     "@types/ejs": "^3.1.5",
