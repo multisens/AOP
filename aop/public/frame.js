@@ -78,10 +78,7 @@ function Init(url) {
     });
 
     document.addEventListener('keydown', (e) => {
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
-            e.preventDefault();
-        }
-
+        e.preventDefault();
         PostFrameMessage({ type: 'key', key: e.key });
     });
 }

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= pageTitle %></title>
+    <style>
+      body {
+        font-family: sans-serif;
+        text-align: center;
+        padding: 20px;
+        background-color: #2c3e50;
+        color: white;
+        margin: 0;
+      }
+      .container {
+        display: none; /* Todos os contêineres começam escondidos */
+      }
+      #waiting-container {
+        display: block; /* Apenas o de espera começa visível */
+      }
+      h1,
+      h2 {
+        font-weight: 300;
+      }
+      #qrcode {
+        margin: 20px auto;
+        padding: 10px;
+        background-color: white;
+        width: 256px;
+        height: 256px;
+      }
+      #main-video {
+        width: 90%;
+        max-width: 1280px;
+        margin-top: 20px;
+      }
+      #question-text {
+        font-size: 2.5em;
+        margin: 40px 20px;
+      }
+      #options-list {
+        list-style-type: none;
+        padding: 0;
+        font-size: 1.5em;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin: 0 5%;
+      }
+      #options-list li {
+        background-color: #34495e;
+        margin: 10px;
+        padding: 15px;
+        border-radius: 5px;
+        position: relative;
+      }
+      .result-bar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        background-color: #2980b9;
+        opacity: 0.5;
+        z-index: -1;
+        transition: width 0.5s ease;
+      }
+      .correct-answer {
+        border: 4px solid #2ecc71;
+        box-shadow: 0 0 15px #2ecc71;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="waiting-container" class="container">
+      <h1>Sala de Quiz: <span style="color: #3498db"><%= roomId %></span></h1>
+      <div id="status-text">
+        <h2>Aguardando jogadores para iniciar...</h2>
+      </div>
+      <p>Aponte a câmera do celular para o QR Code para entrar.</p>
+      <div id="qrcode"></div>
+    </div>
+
+    <div id="video-container" class="container">
+      <video id="main-video" controls autoplay muted></video>
+    </div>
+
+    <div id="question-container" class="container">
+      <div id="question-text"></div>
+      <ul id="options-list"></ul>
+    </div>
+
+    <div id="end-container" class="container">
+      <h1>O Quiz terminou!</h1>
+      <p>Obrigado por jogar.</p>
+    </div>
+
+    <script src="/jquery-3.7.1.min.js"></script>
+    <script src="/navigation.js"></script>
+    <script src="/bootstrap.js"></script>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+
+    <script>
+      window.addEventListener('message', receiveFrameMessage);
+      postFrameMessage({ type: 'loaded' });
+
+      function handleKey(k) {
+        if (k == "Escape") {
+          back();
+        }
+      }
+
+      const roomId = "<%= roomId %>";
+      const playerUrl = "<%= playerUrl %>";
+      const socket = io("<%= logicServerUrl %>");
+
+      // Mapeamento de todos os elementos da página
+      const containers = {
+        waiting: document.getElementById("waiting-container"),
+        video: document.getElementById("video-container"),
+        question: document.getElementById("question-container"),
+        end: document.getElementById("end-container"),
+      };
+      const videoPlayer = document.getElementById("main-video");
+      const questionTextEl = document.getElementById("question-text");
+      const optionsListEl = document.getElementById("options-list");
+
+      new QRCode(document.getElementById("qrcode"), playerUrl);
+
+      // Função para controlar qual contêiner está visível
+      function showContainer(containerName) {
+        Object.values(containers).forEach((c) => (c.style.display = "none"));
+        containers[containerName].style.display = "block";
+      }
+
+      // --- Lógica de Conexão ---
+      socket.on("connect", () => {
+        console.log(
+          "Conectado. Registrando como apresentador da sala:",
+          roomId
+        );
+        // CORRIGIDO: Usa o evento 'joinRoom' unificado
+        socket.emit("joinRoom", { roomId: roomId, isPresenter: true });
+      });
+
+      // --- Lógica para Lidar com Eventos do Servidor ---
+
+      socket.on("roomCreated", (message) => {
+        console.log(message); // Confirma que o servidor criou a sala
+      });
+
+      socket.on("startCountdown", (duration) => {
+        const statusTextDiv = document.getElementById("status-text");
+        let timeLeft = duration;
+        statusTextDiv.innerHTML = `<h2>O quiz começa em:</h2><h1 style="font-size: 4em; margin: 0;">${timeLeft}</h1>`;
+        const countdownInterval = setInterval(() => {
+          timeLeft--;
+          const h1 = statusTextDiv.querySelector("h1");
+          if (h1) h1.innerText = timeLeft;
+          if (timeLeft <= 0) clearInterval(countdownInterval);
+        }, 1000);
+      });
+
+      socket.on("playVideo", ({ url }) => {
+        console.log(`Recebido comando para tocar o vídeo: ${url}`);
+        showContainer("video");
+        videoPlayer.src = url;
+        videoPlayer
+          .play()
+          .catch((e) => console.error("Erro ao tocar vídeo:", e));
+      });
+
+      socket.on("quiz:newQuestion", (question) => {
+        console.log("Nova pergunta recebida:", question.text);
+        showContainer("question");
+        questionTextEl.innerText = question.text;
+        optionsListEl.innerHTML = ""; // Limpa opções anteriores
+
+        question.options.forEach((optionText) => {
+          const li = document.createElement("li");
+          li.innerText = optionText;
+          // Adiciona um contêiner para a barra de resultado
+          const bar = document.createElement("div");
+          bar.className = "result-bar";
+          li.appendChild(bar);
+          optionsListEl.appendChild(li);
+        });
+      });
+
+      // NOVO: Atualiza a barra de resultados em tempo real
+      socket.on("quiz:updateResults", (results) => {
+        const listItems = optionsListEl.getElementsByTagName("li");
+        let totalVotes = Object.values(results).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+        if (totalVotes === 0) totalVotes = 1; // Evita divisão por zero
+
+        Object.entries(results).forEach(([letter, count], index) => {
+          if (listItems[index]) {
+            const percentage = (count / totalVotes) * 100;
+            const bar = listItems[index].querySelector(".result-bar");
+            if (bar) bar.style.width = `${percentage}%`;
+          }
+        });
+      });
+
+      // NOVO: Mostra a resposta correta ao final da pergunta
+      socket.on("quiz:endQuestion", ({ correctAnswerIndex }) => {
+        const listItems = optionsListEl.getElementsByTagName("li");
+        if (listItems[correctAnswerIndex]) {
+          listItems[correctAnswerIndex].classList.add("correct-answer");
+        }
+      });
+
+      socket.on("quizEnded", (message) => {
+        console.log(message);
+        showContainer("end");
+      });
+    </script>
+  </body>
+</html>
