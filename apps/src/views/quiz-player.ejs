@@ -60,7 +60,6 @@
       </div>
     </div>
 
-
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
       const roomId = "<%= roomId %>";
@@ -77,9 +76,8 @@
       });
 
       socket.on("startCountdown", (duration) => {
-        const countdownContainer = document.getElementById(
-          "countdown-container"
-        );
+        const countdownContainer =
+          document.getElementById("countdown-container");
         let timeLeft = duration;
         countdownContainer.innerHTML = `<h2>O quiz começa em:</h2><div id="countdown">${timeLeft}</div>`;
         const countdownInterval = setInterval(() => {
@@ -91,9 +89,14 @@
           if (timeLeft <= 0) {
             clearInterval(countdownInterval);
             countdownContainer.innerHTML =
-              "<h2>Prepare-se! Olhe para a tela principal para acompanhar!</h2>";
+              "<h2>Prepare-se! Olhe para a tela principal...</h2>";
           }
         }, 1000);
+      });
+
+      socket.on("playVideo", () => {
+        gameContainer.innerHTML =
+          "<h1>Assista à tela principal!</h1><p>Um vídeo informativo está sendo exibido.</p>";
       });
 
       socket.on("quiz:showAnswerOptions", (question) => {
@@ -117,7 +120,8 @@
 
       socket.on("quiz:feedback", ({ correct }) => {
         if (correct) {
-          gameContainer.innerHTML = '<h1 class="feedback correct">CERTO!</h1>';
+          gameContainer.innerHTML =
+            '<h1 class="feedback correct">CERTO!</h1>';
         } else {
           gameContainer.innerHTML =
             '<h1 class="feedback incorrect">ERRADO!</h1>';
