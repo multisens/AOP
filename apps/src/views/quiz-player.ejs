@@ -5,9 +5,10 @@
     <style>
       body {
         font-family: sans-serif;
+        font-size: 1.2rem;
         text-align: center;
         padding: 20px;
-        background-color: #333;
+        background-color: #295f95;
         color: white;
         margin: 0;
       }
@@ -21,16 +22,17 @@
       #answers-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 20px;
+        gap: 30px;
         width: 95%;
-        max-width: 800px;
+        max-width: 900px;
       }
       .answer-btn {
-        height: 150px;
+        aspect-ratio: 1 / 1;
+        height: auto;
         border: none;
-        border-radius: 8px;
+        border-radius: 12px;
         cursor: pointer;
-        font-size: 3em;
+        font-size: 4em;
         color: white;
       }
       .feedback {
@@ -53,7 +55,7 @@
   <body>
     <div id="game-container">
       <h2>
-        Você está na sala: <span style="color: #3498db"><%= roomId %></span>
+        Você está na sala: <span style="color: #e9b200"><%= roomId %></span>
       </h2>
       <div id="countdown-container">
         <p>Aguardando o início...</p>
@@ -65,7 +67,7 @@
       const roomId = "<%= roomId %>";
       const socket = io("<%= logicServerUrl %>");
       const gameContainer = document.getElementById("game-container");
-      const colors = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f"];
+      const colors = ["#c0392b", "#27ae60", "#f1c40f", "#2980b9"];
 
       socket.on("connect", () => {
         socket.emit("joinRoom", { roomId, isPresenter: false });

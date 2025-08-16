@@ -16,14 +16,14 @@
         text-align: center;
         color: white;
 
-        background-image: url("media/eduplay/images/quiz-screen.png");
+        background-image: url("/media/eduplay/images/quiz-screen.png");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
       }
       .container {
-        display: none; /* Todos os contêineres começam escondidos por padrão */
+        display: none;
         width: 100vw;
         height: 100vh;
         display: flex;
@@ -37,12 +37,11 @@
         left: 0;
         width: 100%;
         height: 100%;
-        object-fit: cover; /* Garante que o vídeo cubra toda a tela */
-        z-index: 1;
+        object-fit: cover;
+        z-index: -1; /* Colocado atrás de todo o conteúdo */
       }
-      /* --- NOVO: Estilo para o QR Code como um overlay --- */
       #qrcode-overlay {
-        display: none; /* Começa escondido */
+        display: none;
         position: fixed;
         bottom: 30px;
         right: 30px;
@@ -67,33 +66,42 @@
       }
       #options-list li {
         padding: 20px;
+        padding-left: 25px;
         border-radius: 5px;
         text-align: left;
-        padding-left: 25px;
+        transition: transform 0.2s, border 0.2s;
       }
       .option-red {
-        background-color: #cc4637;
+        background-color: #e74c3c;
       }
       .option-green {
         background-color: #27ae60;
       }
       .option-yellow {
-        background-color: #dab200;
+        background-color: #f1c40f;
         color: #333;
       }
       .option-blue {
-        background-color: #1f75af;
+        background-color: #2980b9;
       }
       .correct-answer {
-        border: 5px solid #fff;
+        border: 5px solid #2ecc71;
         transform: scale(1.05);
+        box-shadow: 0 0 20px #2ecc71;
       }
-      /* --- NOVO: Estilo para a tela de estatísticas --- */
-      #stats-container {
-        font-size: 2.5em;
-      }
-      #stats-container .stat {
-        margin: 20px;
+      /* --- NOVO: Estilo para o OVERLAY de estatísticas --- */
+      #stats-overlay {
+        display: none; /* Começa escondido */
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        padding: 15px 0;
+        font-size: 2em;
+        z-index: 200;
+        justify-content: center;
+        gap: 50px;
       }
       .stat-correct {
         color: #2ecc71;
@@ -104,7 +112,7 @@
     </style>
   </head>
   <body>
-    <video id="main-video" autoplay muted playsinline></video>
+    <video id="main-video" autoplay playsinline></video>
 
     <div id="qrcode-overlay">
       <div id="qrcode"></div>
@@ -115,10 +123,7 @@
       <ul id="options-list"></ul>
     </div>
 
-    <div id="stats-container" class="container">
-      <h1>Resultados</h1>
-      <div id="stats-details"></div>
-    </div>
+    <div id="stats-overlay"></div>
 
     <div id="end-container" class="container">
       <h1>O Quiz terminou!</h1>
@@ -128,7 +133,6 @@
     <script src="/jquery-3.7.1.min.js"></script>
     <script src="/navigation.js"></script>
     <script src="/bootstrap.js"></script>
-
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
 
@@ -146,16 +150,21 @@
       const playerUrl = "<%= playerUrl %>";
       const socket = io("<%= logicServerUrl %>");
 
-      // Mapeamento dos elementos da página
       const videoPlayer = document.getElementById("main-video");
       const qrCodeOverlay = document.getElementById("qrcode-overlay");
       const questionContainer = document.getElementById("question-container");
-      const statsContainer = document.getElementById("stats-container");
+      const statsOverlay = document.getElementById("stats-overlay");
       const endContainer = document.getElementById("end-container");
       const questionTextEl = document.getElementById("question-text");
       const optionsListEl = document.getElementById("options-list");
 
-      // --- Lógica de Conexão ---
+      function showContainer(containerToShow) {
+        [questionContainer, endContainer].forEach(
+          (c) => (c.style.display = "none")
+        );
+        if (containerToShow) containerToShow.style.display = "flex";
+      }
+
       socket.on("connect", () => {
         console.log(
           "Conectado. Registrando como apresentador da sala:",
@@ -164,34 +173,27 @@
         socket.emit("joinRoom", { roomId: roomId, isPresenter: true });
       });
 
-      // --- Lógica para Lidar com Eventos do Servidor ---
-
-      // NOVO: Ouve o evento para tocar o vídeo de introdução
       socket.on("playIntroVideo", (introVideo) => {
         console.log("Iniciando vídeo de introdução:", introVideo.src);
+        showContainer(null);
         videoPlayer.style.display = "block";
         videoPlayer.src = introVideo.src;
         videoPlayer.play();
 
-        // Agenda a aparição do QR Code
         setTimeout(() => {
           new QRCode(document.getElementById("qrcode"), playerUrl);
           qrCodeOverlay.style.display = "block";
-          console.log("QR Code apareceu.");
         }, introVideo.qrCodeDelay * 1000);
 
-        // Agenda o desaparecimento do QR Code
         setTimeout(() => {
           qrCodeOverlay.style.display = "none";
-          console.log("QR Code desapareceu.");
         }, (introVideo.qrCodeDelay + introVideo.qrCodeDuration) * 1000);
       });
 
       socket.on("playVideo", ({ url }) => {
         console.log(`Recebido comando para tocar o vídeo: ${url}`);
-        // Esconde as outras telas e mostra o vídeo
-        questionContainer.style.display = "none";
-        statsContainer.style.display = "none";
+        showContainer(null); // Esconde todos os contêineres de conteúdo
+        statsOverlay.style.display = "none"; // Esconde o overlay de stats
         videoPlayer.style.display = "block";
         videoPlayer.src = url;
         videoPlayer.play();
@@ -199,49 +201,54 @@
 
       socket.on("quiz:newQuestion", (question) => {
         console.log("Nova pergunta recebida:", question.text);
-        videoPlayer.style.display = "none"; // Esconde o vídeo
-        statsContainer.style.display = "none";
-        questionContainer.style.display = "flex"; // Mostra a pergunta
+        videoPlayer.style.display = "none";
+        statsOverlay.style.display = "none"; // Esconde o overlay de stats da pergunta anterior
+        showContainer(questionContainer);
 
         questionTextEl.innerText = question.text;
         optionsListEl.innerHTML = "";
 
         const prefixes = ["A)", "B)", "C)", "D)"];
-        const colorClasses = ["option-red", "option-green", "option-yellow", "option-blue"];
+        const colorClasses = [
+          "option-red",
+          "option-green",
+          "option-yellow",
+          "option-blue",
+        ];
 
         question.options.forEach((optionText, index) => {
           const li = document.createElement("li");
-          li.classList.add(colorClasses[index % colorClasses.length]);
+          // Adiciona a classe de cor correspondente
+          li.classList.add(colorClasses[index]);
+          // Adiciona o prefixo ao texto
           li.innerText = `${prefixes[index]} ${optionText}`;
           optionsListEl.appendChild(li);
         });
       });
 
-      // MODIFICADO: Agora também exibe as estatísticas de acertos/erros
-      socket.on(
-        "quiz:endQuestion",
-        ({ results, correctAnswerIndex, stats }) => {
-          console.log(
-            "Fim da pergunta. Exibindo resultados e estatísticas:",
-            stats
-          );
-          questionContainer.style.display = "none";
-          statsContainer.style.display = "flex";
+      // --- LÓGICA MODIFICADA PARA EXIBIR RESULTADOS ---
+      socket.on("quiz:endQuestion", ({ correctAnswerIndex, stats }) => {
+        console.log("Fim da pergunta. Exibindo estatísticas:", stats);
 
-          const statsDetails = document.getElementById("stats-details");
-          statsDetails.innerHTML = `
+        // 1. Destaca a resposta correta na lista que já está na tela
+        const listItems = optionsListEl.getElementsByTagName("li");
+        if (listItems[correctAnswerIndex]) {
+          listItems[correctAnswerIndex].classList.add("correct-answer");
+        }
+
+        // 2. Preenche e exibe o overlay de estatísticas
+        statsOverlay.innerHTML = `
             <div class="stat stat-correct">Acertos: ${stats.correct}</div>
             <div class="stat stat-incorrect">Erros: ${stats.incorrect}</div>
         `;
-        }
-      );
+        statsOverlay.style.display = "flex";
+      });
 
       socket.on("quizEnded", (message) => {
         console.log(message);
         videoPlayer.style.display = "none";
-        questionContainer.style.display = "none";
-        statsContainer.style.display = "none";
-        endContainer.style.display = "flex";
+        statsOverlay.style.display = "none";
+        showContainer(endContainer);
       });
     </script>
   </body>

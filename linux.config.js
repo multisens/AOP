@@ -33,7 +33,7 @@ module.exports = {
             autorestart: false,
             env: {
                 PORT: 8081,
-                HOST_IP: '10.100.20.70',
+                HOST_IP: '192.168.1.21',
                 BROKER: 'mqtt://localhost',
                 USER_DATA_PATH: '../user-files'
             }
