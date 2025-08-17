@@ -47,7 +47,7 @@ async function cards(views) {
 				id: `profile${i}`,
 				width: `${card_width}px`,
 				left: `${left + i*delta}%`,
-				focus: `moveleft="profile${i-1 >= 0 ? i-1 : num}" moveright="profile${i+1}" movedown="back" select="setUser${i}"`,
+				focus: `moveleft="profile${i-1 >= 0 ? i-1 : num}" moveright="profile${i+1}" select="setUser${i}"`,
 				img: DATA.users[i].avatar,
 				name: DATA.users[i].name
 			});
@@ -59,7 +59,7 @@ async function cards(views) {
 			id: `profile${num}`,
 			width: `${card_width}px`,
 			left: `${left + num*delta}%`,
-			focus: `moveleft="profile${num-1}" moveright="profile0" movedown="back" select="create"`,
+			focus: `moveleft="profile${num-1}" moveright="profile0" select="create"`,
 			img: 'new.png',
 			name: 'Create new<br/>profile'
 		});
