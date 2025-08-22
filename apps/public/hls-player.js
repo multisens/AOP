@@ -22,7 +22,11 @@ function createHLSPlayer(url, elm) {
         });
 
         hls.on(Hls.Events.ERROR, (event, data) => {
-            console.error('Erro no HLS:', data);
+            // console.error('Erro no HLS:', data);
+            console.log('restart..');
+            hls.detachMedia();
+            hls.loadSource(url);
+            hls.attachMedia(elm);
         });
     }
     else if (elm.canPlayType('application/vnd.apple.mpegurl')) {

@@ -15,7 +15,7 @@
 		},
 		{
 			"id"   					: "4b58baf8-65ce",
-			"name" 					: "Karen",
+			"name" 					: "Débora",
 			"age"  					: 20,
 			"isGroup" 				: false,
 			"gender" 				: "F",
@@ -30,7 +30,7 @@
 		},
     	{
 			"id" 					: "c41e7a99-5dce",
-			"name" 					: "João",
+			"name" 					: "Joel",
 			"age"					: 20,
 			"isGroup" 				: false,
 			"gender" 				: "M",

@@ -34,11 +34,11 @@ ffmpeg  -re \
         -hls_segment_filename $segment_out \
         -hls_time 1 \
         -hls_list_size 2 \
-        -hls_flags delete_segments+append_list+omit_endlist \
+        -hls_flags append_list+omit_endlist \
         -fflags +nobuffer \
         $stream_out
 
 echo -e "\n\n-------------------------------------------------------------------"
 echo "Streaming ended, cleaning output files"
 echo -e "-------------------------------------------------------------------\n\n"
-rm ${path}/stream/*
+# rm ${path}/stream/*

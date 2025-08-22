@@ -42,8 +42,64 @@ function beforeBack() {
     postFrameMessage({ type: 'publish', topic: '${topic.currentApp}', message: '', retain: true });
 }`;
 const fullscreenScript = `
-function handleKey(k) {
+
+
+async function findSepe() {
+  try {
+    const response = await fetch(
+      "http://localhost:44642/tv3/sensory-effect-renderers"
+    );
+
+    console.log("Response:", response);
+
+    if (!response.ok) {
+      console.log(response)
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data || !data.renderers || data.renderers.length === 0) {
+      return null;
+    }
+
+    sepe = data.renderers[0];
+    return data.renderers[0];
+  } catch (error) {
+    console.error("Error fetching SEPE:", error);
+    return null;
+  }
+}
+
+async function playLightEffect(sepe, action, color) {
+  const body = {
+    effectType: "LightType",
+    action: action,
+    properties: [{ name: "color", value: color }],
+  };
+
+  const response = await fetch(
+    "http://localhost:44642/tv3/sensory-effect-renderers/" + sepe.id,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if(!response.ok) {
+  console.warn(response)
+  }
+}
+
+async function handleKey(k) {
     if (k == 'Escape') {
+        const sepe = await findSepe();
+
+        console.log("Turning effects off before quitting page.")
+        await playLightEffect(sepe, "stop", [0,0,0]);
+
         window.location.href = '/cefet?prev=fullscreen';
     }
 }`;
@@ -62,7 +118,7 @@ router.get('/', (req:Request, res:Response) => {
     }
 
     res.render('bootstrap', {
-        logo: `<svg style="position: absolute; left: 14%; top: -3%; transform: scale(94%);">${DATA.svgLogo}</svg>`,
+        logo: `<svg style="position: absolute; left: 50%; top: 50%; transform: scale(200%);">${DATA.svgLogo}</svg>`,
         name: 'CEFET/RJ TV',
         details: '<img id="details" style="left: 4%; top: 40%; width: 96%; height: 23%;" src="/media/carnaval/details.png"/>' +
                  '<img id="connect" style="left: 3%; top: 72%; width: 97%; height: 7%;" moveup="tvvideo" movedown="back" src="/media/carnaval/vrButton.png"/>',

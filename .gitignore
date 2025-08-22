@@ -1,7 +1,11 @@
 node_modules
 
-apps/public/media/cefet/stream
+apps/public/**/stream/*.ts
+
+carnaval/*.mp4
 
 dist
 
 .env
+apps/public/media/carnaval/beijaflor.mp4
+apps/public/media/carnaval/beijaflorCompleto.mp4

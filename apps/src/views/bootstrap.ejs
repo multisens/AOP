@@ -47,13 +47,98 @@
     <script src="/navigation.js"></script>
     <script src="/bootstrap.js"></script>
     <script src="/hls-player.js"></script>
+    <script>
+
+let sepe = null
+
+async function findSepe() {
+  try {
+    const response = await fetch(
+      "http://localhost:44642/tv3/sensory-effect-renderers"
+    );
+
+    console.log("Response:", response);
+
+    if (!response.ok) {
+      console.log(response)
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data || !data.renderers || data.renderers.length === 0) {
+      return null;
+    }
+
+    sepe = data.renderers[0];
+    return data.renderers[0];
+  } catch (error) {
+    console.error("Error fetching SEPE:", error);
+    return null;
+  }
+}
+
+async function playLightEffect(sepe, action, color) {
+  const body = {
+    effectType: "LightType",
+    action: action,
+    properties: [{ name: "color", value: color }],
+  };
+
+  const response = await fetch(
+    "http://localhost:44642/tv3/sensory-effect-renderers/" + sepe.id,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if(!response.ok) {
+  console.warn(response)
+  }
+}
+
+async function playScentEffect(sepe, action, intensity) {
+  const body = {
+    effectType: "ScentType",
+    action: action,
+    properties: [{ name: "intensity", value: intensity }],
+  };
+
+  const response = await fetch(
+    "http://localhost:44642/tv3/sensory-effect-renderers/" + sepe.id,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if(!response.ok) {
+    console.warn(response);
+  }
+}
+
+async function turnOffEffects() {
+  const sepe = findSepe();
+  if(sepe){
+    playLightEffect(sepe, "stop", [0,0,0]);
+    playScentEffect(sepe, "stop", 0)
+  }
+}
+
+    </script>
   </head>
   <body>
     <div id="left-pane">
       <div style="z-index: 2; left: 20%; top: 3%; width: 60%; height: 20%;">
         <%- logo %>
       </div>
-      <span style="z-index: 2; font-size: 30px; left:50%; top:28%; transform: translate(-50%, -50%);"><%- name %></span>
+      <span style="z-index: 2; font-weight: bold; font-size: 50px; left:50%; top:28%; transform: translate(-50%, -50%);"><%- name %></span>
 
       <%- details %>
       <img id="back" style="left: 10%; top: 87%; width: 70%; height: 9%;" <%- backMove %> select="back" src="/media/back.png"/>

@@ -1,6 +1,6 @@
 import NclApp, { nclContext } from './ncl-app';
 
-export let app_path = '/Users/joel/Coding/GingaDistrib/carnaval';
+export let app_path = '/home/dell-g15-1/Documentos/SetExpo/GingaDistrib/carnaval';
 export let doc:nclContext = {
     id: 'body',
     ports: [
