@@ -22,7 +22,6 @@ echo -e "-------------------------------------------------------------------\n\n
 # -f hls                        : output stream in HLS format
 # -hls_time 1                   : HLS file segment with 1 seconds
 # -hls_list_size 2              : Keep 2 segments in the playlist
-# -hls_flags delete_segments    : Remove old segments
 # -hls_flags append_list        : Live list update
 # -hls_flags omit_endlist       : Never end the stream
 # -fflags +nobuffer             : deactivate the in/out buffer for faster stream
@@ -39,6 +38,5 @@ ffmpeg  -re \
         $stream_out
 
 echo -e "\n\n-------------------------------------------------------------------"
-echo "Streaming ended, cleaning output files"
+echo "Streaming ended"
 echo -e "-------------------------------------------------------------------\n\n"
-# rm ${path}/stream/*

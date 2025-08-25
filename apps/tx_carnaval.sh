@@ -1,27 +1,17 @@
 #!/bin/bash
 
-CONTROL_FILE="./control.txt"
-# videos=(
-#     "public/media/carnaval/beijaflorCompleto.mp4"
-#     "public/media/carnaval/granderioCompleto.mp4"
-# )
+VIDEO="public/media/carnaval/beijaflor.mp4"
+PLAYLIST_NAME="carnaval"
 
-touch "$CONTROL_FILE"
-echo "Monitorando $CONTROL_FILE - Escreva 'STOP' para parar o script"
 
-# for video in "${videos[@]}"; do
-while true; do
-    # Lê o conteúdo do arquivo (removendo espaços em branco e convertendo para maiúsculas)
-    CONTENT=$(tr -d '[:space:]' < "$CONTROL_FILE" | tr '[:lower:]' '[:upper:]')
-    
-    # Verifica se o arquivo contém "STOP"
-    if [[ "$CONTENT" == "STOP" ]]; then
-        echo "STOP detectado no arquivo. Encerrando..."
-        break
-    fi
-    
-    # ./stream.sh $video "carnaval"
-    ./stream.sh "public/media/carnaval/beijaflor.mp4" "carnaval"
-done
+path=$(dirname $VIDEO)
+file=$(basename $VIDEO)
+segname=${file%.*}
+num_seg=$(find "$path/stream" -type f -name "*.ts" | wc -l)
 
-rm "$CONTROL_FILE"
+# ./stream.sh $VIDEO $PLAYLIST_NAME
+
+echo -e "\n\n-------------------------------------------------------------------"
+echo "Streaming video ${file} into stream $path/$PLAYLIST_NAME.m3u8"
+echo -e "-------------------------------------------------------------------\n\n"
+./tx_segments.sh "$path/stream/$PLAYLIST_NAME" $segname $num_seg

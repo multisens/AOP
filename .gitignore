@@ -7,5 +7,5 @@ carnaval/*.mp4
 dist
 
 .env
+.DS_Store
 apps/public/media/carnaval/beijaflor.mp4
-apps/public/media/carnaval/beijaflorCompleto.mp4
