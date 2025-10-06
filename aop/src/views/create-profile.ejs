@@ -69,6 +69,209 @@
             flex: 1;
         }
 
+        .language-options {
+            margin: 20px 0;
+        }
+
+        .language-options label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .language-options select {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        .signing-config {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border: 2px solid #4CAF50;
+        }
+
+        .signing-config h3 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+
+        .signing-options {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+
+        .signing-options > div {
+            flex: 1;
+        }
+
+        #closedSigningWidth {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        #width-value {
+            color: #4CAF50;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .content-rating-section {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border: 2px solid #ff9800;
+        }
+
+        .content-rating-section h3 {
+            color: #ff9800;
+            margin-top: 0;
+        }
+
+        /* === MODAL DE SELEÇÃO DE AVATAR === */
+        .avatar-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .avatar-modal-content {
+            background-color: #121212;
+            border-radius: 12px;
+            padding: 30px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80%;
+            overflow-y: auto;
+            border: 2px solid #4CAF50;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 15px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #4CAF50;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #ffffff;
+            font-size: 30px;
+            cursor: pointer;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            transition: background-color 0.3s ease;
+        }
+
+        .close-btn:hover {
+            background-color: #333;
+        }
+
+        .avatar-categories {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            justify-content: center;
+        }
+
+        .category-btn {
+            padding: 12px 25px;
+            border: 2px solid #888888;
+            border-radius: 8px;
+            background-color: #2a2a2a;
+            color: #ffffff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .category-btn:hover {
+            border-color: #4CAF50;
+        }
+
+        .category-btn.active {
+            background-color: #4CAF50;
+            border-color: #4CAF50;
+            color: #121212;
+            font-weight: bold;
+        }
+
+        .avatar-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin: 25px 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .avatar-option {
+            border: 3px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 10px;
+            text-align: center;
+            background-color: #2a2a2a;
+        }
+
+        .avatar-option:hover {
+            border-color: #888888;
+            transform: scale(1.05);
+        }
+
+        .avatar-option.selected {
+            border-color: #4CAF50;
+            background-color: #1a4a1a;
+            transform: scale(1.1);
+        }
+
+        .avatar-option img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-bottom: 8px;
+        }
+
+        .avatar-option .avatar-name {
+            font-size: 12px;
+            color: #cccccc;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 2px solid #333;
+        }
+
+        .modal-actions .btn {
+            min-width: 120px;
+        }
+
         .ratings {
             display: flex;
             gap: 10px;
@@ -220,14 +423,27 @@
                 </div>
                 
                 <div class="gender-language">
-                    <select id="language" name="language">
-                        <option value="pt-br">Idioma selecionado: Português</option>
-                        <option value="en">Idioma selecionado: Inglês</option>
-                    </select>
                     <select id="gender" name="gender">
                         <option value="M">Masculino</option>
                         <option value="F">Feminino</option>
                         <option value="NB">Não Binário</option>
+                    </select>
+                </div>
+
+                <!-- Configurações de Idioma separadas conforme norma -->
+                <div class="language-options">
+                    <label>Configurações de Idioma:</label>
+                    <select id="audioLanguage" name="audioLanguage">
+                        <option value="pt-br">Áudio: Português</option>
+                        <option value="en">Áudio: Inglês</option>
+                    </select>
+                    <select id="closeCaptioningLanguage" name="closeCaptioningLanguage">
+                        <option value="pt-br">Legendas: Português</option>
+                        <option value="en">Legendas: Inglês</option>
+                    </select>
+                    <select id="userInterfaceLanguage" name="userInterfaceLanguage">
+                        <option value="pt-br">Interface: Português</option>
+                        <option value="en">Interface: Inglês</option>
                     </select>
                 </div>
                 
@@ -264,6 +480,42 @@
                         <img id="dialogue-enhancement" src="/media/dialogue-enhancement.png" alt="Aprimoramento de Diálogo">
                         <label>Aprim. de Diálogo</label>
                     </div>
+                    <div class="accessibility-item" onclick="toggleAccessibility('voice-guidance')">
+                        <img id="voice-guidance" src="/media/voice-guidance.png" alt="Guia por Voz">
+                        <label>Guia por Voz</label>
+                    </div>
+                </div>
+
+                <!-- Configurações da Janela de Libras (norma ABNT NBR 25608) -->
+                <div id="signing-config" class="signing-config" style="display: none;">
+                    <h3>Configurações da Janela de Libras</h3>
+                    <div class="signing-options">
+                        <div>
+                            <label for="closedSigningSide">Posição da Janela:</label>
+                            <select id="closedSigningSide" name="closedSigningSide">
+                                <option value="right">Direita</option>
+                                <option value="left">Esquerda</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="closedSigningWidth">Largura da Janela (%):</label>
+                            <input type="range" min="14" max="28" value="20" id="closedSigningWidth" name="closedSigningWidth">
+                            <span id="width-value">20%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Classificação Etária (Condicional - apenas se controle parental ativo) -->
+                <div id="content-rating-section" class="content-rating-section" style="display: none;">
+                    <h3>Classificação Máxima Permitida</h3>
+                    <select id="maxContentRating" name="maxContentRating">
+                        <option value="L">Livre</option>
+                        <option value="10">10 anos</option>
+                        <option value="12">12 anos</option>
+                        <option value="14">14 anos</option>
+                        <option value="16">16 anos</option>
+                        <option value="18">18 anos</option>
+                    </select>
                 </div>
             </form>
         </div>
@@ -274,6 +526,39 @@
                 <img id="selected-avatar" src="/media/profile.png" alt="Escolher Avatar">
             </button>
             <label>Escolha seu Avatar:</label>
+        </div>
+    </div>
+
+    <!-- Modal de Seleção de Avatar -->
+    <div id="avatar-modal" class="avatar-modal" style="display: none;">
+        <div class="avatar-modal-content">
+            <div class="modal-header">
+                <h2>Escolha seu Avatar</h2>
+                <button class="close-btn" onclick="closeAvatarModal()">&times;</button>
+            </div>
+            
+            <!-- Categorias -->
+            <div class="avatar-categories">
+                <button class="category-btn active" data-category="default" onclick="loadAvatarCategory('default')">
+                    Padrões
+                </button>
+                <button class="category-btn" data-category="animals" onclick="loadAvatarCategory('animals')">
+                    Animais
+                </button>  
+                <button class="category-btn" data-category="places" onclick="loadAvatarCategory('places')">
+                    Lugares
+                </button>
+            </div>
+            
+            <!-- Grid de avatares -->
+            <div class="avatar-grid" id="avatar-grid">
+                <!-- Avatares carregados dinamicamente -->
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn" onclick="closeAvatarModal()">Cancelar</button>
+                <button class="btn advance" onclick="confirmAvatar()">Confirmar</button>
+            </div>
         </div>
     </div>
     
@@ -309,12 +594,108 @@
         function toggleAccessibility(accessibilityId) {
             const element = document.getElementById(accessibilityId).parentElement;
             element.classList.toggle('selected');
+            
+            // Mostrar configurações da janela de libras se libras for ativado
+            if (accessibilityId === 'sign-language') {
+                const signingConfig = document.getElementById('signing-config');
+                const isSelected = element.classList.contains('selected');
+                signingConfig.style.display = isSelected ? 'block' : 'none';
+            }
         }
 
+        // === SISTEMA DE SELEÇÃO DE AVATARES ===
+        
+        let selectedAvatar = '/media/profile.png'; // Avatar padrão
+        let tempSelectedAvatar = null; // Avatar temporariamente selecionado no modal
+
+        // Configuração dos avatares disponíveis
+        const AVATARS = {
+            default: [
+                { id: '0.png', name: 'Avatar Padrão 1', path: '/0.png' },
+                { id: '1.png', name: 'Avatar Padrão 2', path: '/1.png' },
+                { id: '2.png', name: 'Avatar Padrão 3', path: '/2.png' },
+                { id: 'profile.png', name: 'Avatar Genérico', path: '/media/profile.png' }
+            ],
+            animals: [
+                { id: 'animal1.jpg', name: 'Animal 1', path: '/media/avatars/animal1.jpg' },
+                { id: 'animal2.jpg', name: 'Animal 2', path: '/media/avatars/animal2.jpg' },
+                { id: 'animal3.jpg', name: 'Animal 3', path: '/media/avatars/animal3.jpg' },
+                { id: 'animal4.jpg', name: 'Animal 4', path: '/media/avatars/animal4.jpg' },
+                { id: 'animal5.jpg', name: 'Animal 5', path: '/media/avatars/animal5.jpg' }
+            ],
+            places: [
+                { id: 'place1.jpg', name: 'Lugar 1', path: '/media/avatars/place1.jpg' },
+                { id: 'place2.jpg', name: 'Lugar 2', path: '/media/avatars/place2.jpg' },
+                { id: 'place3.jpg', name: 'Lugar 3', path: '/media/avatars/place3.jpg' },
+                { id: 'place4.jpg', name: 'Lugar 4', path: '/media/avatars/place4.jpg' },
+                { id: 'place5.jpg', name: 'Lugar 5', path: '/media/avatars/place5.jpg' }
+            ]
+        };
+
         function openAvatarSelection() {
-            // Por enquanto, vamos usar um avatar aleatório
-            // Futuramente pode implementar seleção de avatar
-            alert('Seleção de avatar será implementada em breve!');
+            document.getElementById('avatar-modal').style.display = 'flex';
+            loadAvatarCategory('default');
+            tempSelectedAvatar = selectedAvatar; // Backup do avatar atual
+        }
+
+        function closeAvatarModal() {
+            document.getElementById('avatar-modal').style.display = 'none';
+            tempSelectedAvatar = null;
+        }
+
+        function loadAvatarCategory(category) {
+            // Atualizar botões de categoria
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.category === category) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Carregar avatares da categoria
+            const avatarGrid = document.getElementById('avatar-grid');
+            avatarGrid.innerHTML = '';
+
+            const categoryAvatars = AVATARS[category] || [];
+            
+            categoryAvatars.forEach(avatar => {
+                const avatarDiv = document.createElement('div');
+                avatarDiv.className = 'avatar-option';
+                avatarDiv.onclick = () => selectAvatarFromModal(avatar.path, avatarDiv);
+                
+                // Marcar como selecionado se for o avatar atual
+                if (avatar.path === selectedAvatar || avatar.path === tempSelectedAvatar) {
+                    avatarDiv.classList.add('selected');
+                }
+                
+                avatarDiv.innerHTML = `
+                    <img src="${avatar.path}" alt="${avatar.name}" onerror="this.src='/media/profile.png'">
+                    <div class="avatar-name">${avatar.name}</div>
+                `;
+                
+                avatarGrid.appendChild(avatarDiv);
+            });
+        }
+
+        function selectAvatarFromModal(avatarPath, element) {
+            // Remover seleção anterior
+            document.querySelectorAll('.avatar-option.selected').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            
+            // Selecionar novo avatar
+            element.classList.add('selected');
+            tempSelectedAvatar = avatarPath;
+            
+            // Preview instantâneo
+            document.getElementById('selected-avatar').src = avatarPath;
+        }
+
+        function confirmAvatar() {
+            if (tempSelectedAvatar) {
+                selectedAvatar = tempSelectedAvatar;
+            }
+            closeAvatarModal();
         }
 
         function saveProfile() {
@@ -322,32 +703,79 @@
             const groupProfile = document.getElementById('group-profile').checked;
             const childProfile = document.getElementById('child-profile').checked;
             const gender = document.getElementById('gender').value;
-            const language = document.getElementById('language').value;
+
+            // Idiomas separados conforme norma
+            const audioLanguage = document.getElementById('audioLanguage').value;
+            const closeCaptioningLanguage = document.getElementById('closeCaptioningLanguage').value;
+            const userInterfaceLanguage = document.getElementById('userInterfaceLanguage').value;
 
             const selectedRating = document.querySelector('.ratings img.selected');
             const ageRating = selectedRating ? selectedRating.id : null;
 
+            // Configurações de acessibilidade
             const captions = document.getElementById('closed-caption').parentElement.classList.contains('selected');
             const signLanguageWindow = document.getElementById('sign-language').parentElement.classList.contains('selected');
             const audioDescription = document.getElementById('audio-description').parentElement.classList.contains('selected');
             const dialogueEnhancement = document.getElementById('dialogue-enhancement').parentElement.classList.contains('selected');
+            const voiceGuidance = document.getElementById('voice-guidance').parentElement.classList.contains('selected');
 
+            // Configurações da janela de libras (norma ABNT NBR 25608)
+            const closedSigningSide = document.getElementById('closedSigningSide').value;
+            const closedSigningWidth = parseInt(document.getElementById('closedSigningWidth').value);
+
+            // Classificação máxima (obrigatória se controle parental ativo)
+            const maxContentRating = childProfile ? document.getElementById('maxContentRating').value : null;
+
+            // Validações conforme norma
             if (!name || !document.getElementById('terms').checked) {
                 alert('Por favor, preencha todos os campos obrigatórios e aceite os termos.');
                 return;
             }
 
+            if (name.length > 20) {
+                alert('O nome deve ter no máximo 20 caracteres.');
+                return;
+            }
+
+            if (childProfile && !maxContentRating) {
+                alert('Por favor, selecione a classificação máxima permitida para o perfil de criança.');
+                return;
+            }
+
+            // Objeto conforme norma ABNT NBR 25608
             const newProfile = {
+                // Campos básicos
                 name,
                 isGroup: groupProfile,
                 parentalControl: childProfile,
                 gender,
-                language,
-                ageRating,
+                
+                // Avatar selecionado
+                avatar: selectedAvatar,
+                
+                // Idiomas separados
+                audioLanguage,
+                closeCaptioningLanguage, 
+                userInterfaceLanguage,
+                language: audioLanguage, // Para compatibilidade
+                
+                // Configurações de acessibilidade
                 captions,
+                closedCaptioning: captions, // Nome da norma
                 signLanguageWindow,
+                closedSigning: signLanguageWindow, // Nome da norma
                 audioDescription,
-                dialogueEnhancement
+                dialogueEnhancement,
+                dialogEnhancement: dialogueEnhancement, // Nome da norma
+                voiceGuidance,
+                
+                // Configurações da janela de libras
+                closedSigningSide,
+                closedSigningWidth,
+                
+                // Classificação etária
+                ageRating,
+                maxContentRating
             };
 
             // Enviar para o endpoint do AoP
@@ -381,9 +809,58 @@
             document.querySelectorAll('.accessibility-item.selected').forEach(item => item.classList.remove('selected'));
         }
 
-        // Navegação com teclado (integração com o AoP)
+        // Event listeners para funcionalidades da norma
+        document.addEventListener('DOMContentLoaded', function() {
+            // Mostrar/ocultar seção de classificação baseado no controle parental
+            document.getElementById('child-profile').addEventListener('change', function() {
+                const ratingSection = document.getElementById('content-rating-section');
+                ratingSection.style.display = this.checked ? 'block' : 'none';
+            });
+
+            // Atualizar display da largura da janela de libras
+            document.getElementById('closedSigningWidth').addEventListener('input', function() {
+                document.getElementById('width-value').textContent = this.value + '%';
+            });
+
+            // Sincronizar idiomas por padrão
+            document.getElementById('audioLanguage').addEventListener('change', function() {
+                const selectedLang = this.value;
+                document.getElementById('closeCaptioningLanguage').value = selectedLang;
+                document.getElementById('userInterfaceLanguage').value = selectedLang;
+            });
+        });
+
+        // Navegação com teclado para o modal de avatar
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
+            const modal = document.getElementById('avatar-modal');
+            const isModalOpen = modal.style.display === 'flex';
+            
+            if (isModalOpen) {
+                if (e.key === 'Escape') {
+                    closeAvatarModal();
+                } else if (e.key === 'Enter') {
+                    confirmAvatar();
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    // Navegação entre avatares com setas
+                    const avatars = document.querySelectorAll('.avatar-option');
+                    const selected = document.querySelector('.avatar-option.selected');
+                    
+                    if (avatars.length > 0) {
+                        let currentIndex = Array.from(avatars).indexOf(selected);
+                        let newIndex = currentIndex;
+                        
+                        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                            newIndex = (currentIndex + 1) % avatars.length;
+                        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                            newIndex = (currentIndex - 1 + avatars.length) % avatars.length;
+                        }
+                        
+                        avatars[newIndex].click();
+                        avatars[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+                e.preventDefault(); // Prevenir ação padrão no modal
+            } else if (e.key === 'Escape') {
                 window.location.href = '/profile';
             }
         });

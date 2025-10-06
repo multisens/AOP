@@ -68,6 +68,34 @@
 			"ageRating": "10anos",
 			"age": null,
 			"accessConsent": []
+		},
+		{
+			"id": "user_1759609131451",
+			"nickname": "Joao",
+			"parentalControl": true,
+			"closedCaptioning": false,
+			"closedSigning": true,
+			"closedSigningSide": "right",
+			"closedSigningWidth": 20,
+			"audioDescription": true,
+			"dialogEnhancement": true,
+			"voiceGuidance": true,
+			"maxContentRating": "14",
+			"avatar": "/media/avatars/animal3.jpg",
+			"audioLanguage": "en",
+			"closeCaptioningLanguage": "en",
+			"userInterfaceLanguage": "pt-br",
+			"name": "Joao",
+			"isGroup": false,
+			"language": "en",
+			"captions": false,
+			"subtitle": false,
+			"signLanguageWindow": true,
+			"dialogueEnhancement": true,
+			"gender": "M",
+			"ageRating": "livre",
+			"age": null,
+			"accessConsent": []
 		}
 	]
 }

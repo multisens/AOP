@@ -101,35 +101,79 @@ function script(prev) {
 // Função para criar um novo usuário
 async function createUser(userData) {
     try {
-        // Validação dos dados obrigatórios
+        // === VALIDAÇÕES CONFORME NORMA ABNT NBR 25608 ===
+        
+        // Validação de campos obrigatórios
         if (!userData.name || userData.name.trim() === '') {
-            throw new Error('Nome é obrigatório');
+            throw new Error('Nome (nickname) é obrigatório');
+        }
+        
+        if (userData.name.trim().length > 20) {
+            throw new Error('Nome deve ter no máximo 20 caracteres');
+        }
+
+        // Validação condicional: maxContentRating obrigatório se parentalControl = true
+        if (userData.parentalControl && !userData.maxContentRating) {
+            throw new Error('maxContentRating é obrigatório quando controle parental está ativo');
+        }
+
+        // Validação da classificação de conteúdo
+        if (userData.maxContentRating && !validateContentRating(userData.maxContentRating)) {
+            throw new Error('maxContentRating deve ser um dos valores: L, 10, 12, 14, 16, 18');
+        }
+
+        // Validação da largura da janela de libras
+        if (userData.closedSigningWidth && !validateSigningWidth(userData.closedSigningWidth)) {
+            throw new Error('closedSigningWidth deve estar entre 14 e 28');
+        }
+
+        // Validação do lado da janela de libras
+        if (userData.closedSigningSide && !['left', 'right'].includes(userData.closedSigningSide)) {
+            throw new Error('closedSigningSide deve ser "left" ou "right"');
         }
 
         // Gerar ID único
         const userId = generateUserId();
 
-        // Criar objeto do usuário com todas as propriedades
+        // Criar objeto do usuário conforme norma ABNT NBR 25608
         const newUser = {
-            id: userId,
-            name: userData.name.trim(),
-            isGroup: userData.isGroup || false,
-            avatar: userData.avatar || getDefaultAvatar(), // Avatar padrão válido
-            language: userData.language || 'pt-br',
+            // === CAMPOS OBRIGATÓRIOS DA NORMA ===
+            id: userId,                                                    // UUID string
+            nickname: userData.name.trim(),                                // String (até 20 chars)
+            parentalControl: userData.parentalControl || false,            // Boolean
+            closedCaptioning: userData.captions || userData.closedCaptioning || false,    // Boolean
+            closedSigning: userData.signLanguageWindow || userData.closedSigning || false, // Boolean
+            closedSigningSide: userData.closedSigningSide || 'right',      // Enum: left|right
+            closedSigningWidth: validateSigningWidth(userData.closedSigningWidth) ? 
+                               userData.closedSigningWidth : 20,           // Integer 14-28
+            audioDescription: userData.audioDescription || false,          // Boolean
+            dialogEnhancement: userData.dialogueEnhancement || userData.dialogEnhancement || false, // Boolean
+            voiceGuidance: userData.voiceGuidance || false,               // Boolean
             
-            // Propriedades de acessibilidade - mapeamento para compatibilidade
-            captions: userData.captions || false,
-            subtitle: userData.captions || userData.subtitle || false, // Compatibilidade
-            signLanguageWindow: userData.signLanguageWindow || false,
-            audioDescription: userData.audioDescription || false,
-            dialogueEnhancement: userData.dialogueEnhancement || false,
+            // === CAMPOS CONDICIONAIS ===
+            maxContentRating: userData.parentalControl ? 
+                            (userData.maxContentRating || userData.ageRating || 'L') : null, // String (se parentalControl = true)
             
-            // Novas propriedades do Profile Creation
-            parentalControl: userData.parentalControl || false,
+            // === CAMPOS OPCIONAIS DA NORMA ===
+            avatar: userData.avatar || getDefaultAvatar(),                 // File path
+            audioLanguage: userData.language || userData.audioLanguage || 'pt-br',           // String
+            closeCaptioningLanguage: userData.closeCaptioningLanguage || 
+                                   userData.language || userData.audioLanguage || 'pt-br',   // String  
+            userInterfaceLanguage: userData.userInterfaceLanguage || 
+                                 userData.language || userData.audioLanguage || 'pt-br',     // String
+            
+            // === CAMPOS PARA COMPATIBILIDADE (mantidos) ===
+            name: userData.name.trim(),                                    // Compatibilidade interna
+            isGroup: userData.isGroup || false,                           // Compatibilidade
+            language: userData.language || userData.audioLanguage || 'pt-br', // Compatibilidade
+            captions: userData.captions || userData.closedCaptioning || false, // Compatibilidade
+            subtitle: userData.captions || userData.closedCaptioning || userData.subtitle || false, // Compatibilidade
+            signLanguageWindow: userData.signLanguageWindow || userData.closedSigning || false, // Compatibilidade
+            dialogueEnhancement: userData.dialogueEnhancement || userData.dialogEnhancement || false, // Compatibilidade
+            
+            // === CAMPOS LEGADOS (mantidos) ===
             gender: userData.gender || null,
-            ageRating: userData.ageRating || null,
-            
-            // Propriedades existentes mantidas por compatibilidade
+            ageRating: userData.ageRating || userData.maxContentRating || null,
             age: userData.age || null,
             accessConsent: userData.accessConsent || []
         };
@@ -172,6 +216,19 @@ function getDefaultAvatar() {
     const availableAvatars = ['0.png', '1.png', '2.png'];
     const randomIndex = Math.floor(Math.random() * availableAvatars.length);
     return availableAvatars[randomIndex];
+}
+
+// Função para validar largura da janela de libras (norma ABNT NBR 25608)
+function validateSigningWidth(width) {
+    if (!width) return false;
+    const numWidth = parseInt(width);
+    return numWidth >= 14 && numWidth <= 28;
+}
+
+// Função para validar classificação de conteúdo
+function validateContentRating(rating) {
+    const validRatings = ['L', '10', '12', '14', '16', '18'];
+    return validRatings.includes(rating);
 }
 
 module.exports = {
