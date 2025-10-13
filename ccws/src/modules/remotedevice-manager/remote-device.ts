@@ -49,8 +49,11 @@ export default class RemoteDevice {
 
   protected ws?: WebSocket;
   protected wss: WebSocketServer;
+  protected lws?: WebSocket;
+  protected lwss?: WebSocketServer;
 
   protected subscribed: boolean;
+  protected bridge: boolean;
   protected topic_prefix?: string;
   protected node?: AppNode;
   protected interfaceIds?: string[];
@@ -73,6 +76,7 @@ export default class RemoteDevice {
     }
 
     this.subscribed = false;
+    this.bridge = false;
     this.properties = new Map<string, string>();
 
     console.log("Remote device created with handle:", this.handle);
@@ -94,6 +98,11 @@ export default class RemoteDevice {
   protected onWebSocketMessage(message: any): void {
     const msg: string = message.toString();
     console.log(`Client ${this.handle} sent message\n ${msg}\n\n`);
+
+    if (this.bridge) {
+      this.sendLocalClientMessage(msg);
+      return;
+    }
 
     // Transition Message
     if (msg.includes("transition")) {
@@ -303,7 +312,12 @@ export default class RemoteDevice {
 
   public getUrl(): string {
     if (!this.wss) return "";
-    return `ws://${core.app.url}:${this.wss.options.port}`;
+    return `ws://${core.server.url}:${this.wss.options.port}`;
+  }
+
+  public getLocalEntryPointUrl(): string {
+    if (!this.lwss) return "";
+    return `ws://${core.server.url}:${this.lwss.options.port}`;
   }
 
   public getCapabilities(): DeviceCapabilities[] {
@@ -397,6 +411,48 @@ export default class RemoteDevice {
     return p;
   }
 
+  public addLocalEntryPoint(lwss: WebSocketServer): void {
+    this.lwss = lwss;
+    lwss.on("connection", (ws) => this.onLocalClientConnection(ws));
+  }
+
+  public removeLocalEntryPoint(): void {
+    if (this.lws) {
+      this.lws.close();
+    }
+    if (this.lwss) {
+      this.lwss.close();
+    }
+  }
+
+  protected onLocalClientConnection(lws: WebSocket): void {
+    console.log(`Local client connected to device ${this.handle}.`);
+    this.lws = lws;
+
+    lws.on("close", () => {
+      console.log(`Local client disconnected from device ${this.handle}.`);
+    });
+
+    lws.on("message", (message) => this.onLocalClientMessage(message));
+
+    this.bridge = true;
+  }
+
+  protected onLocalClientMessage(message: any): void {
+    const msg: string = message.toString();
+    console.log(`Local client sent message\n ${msg}\n\n to device ${this.handle}.`);
+
+    if (this.ws) {
+      this.ws?.send(msg);
+    }
+  }
+
+  protected sendLocalClientMessage(msg: string): void {
+    if (this.lws) {
+      this.lws.send(msg);
+    }
+  }
+
   public terminate(): void {
     if (this.ws) {
       this.ws.close();
@@ -404,6 +460,12 @@ export default class RemoteDevice {
     this.wss.close();
     if (this.subscribed) {
       this.removeNode();
+    }
+    if (this.lws) {
+      this.lws.close();
+    }
+    if (this.lwss) {
+      this.lwss.close();
     }
   }
 }

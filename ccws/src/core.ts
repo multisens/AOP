@@ -1,8 +1,13 @@
+import * as dotenv from "dotenv";
 import mqttClient, { TOPICS } from "./mqtt-client";
 import { AppNode } from "./modules/remotedevice-manager/remote-device";
 import { associateAppNodes, disassociateAppNodes } from "./modules/remotedevice-manager/manager";
+dotenv.config();
 
 type CoreData = {
+  server: {
+    url: string;
+  };
   app: {
     sid: string;
     id: string;
@@ -25,6 +30,9 @@ type CoreData = {
 };
 
 const data: CoreData = {
+  server: {
+    url: process.env.SERVER_URL as string
+  },
   app: {
     sid: "",
     id: "",

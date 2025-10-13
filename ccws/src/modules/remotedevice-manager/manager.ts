@@ -25,7 +25,7 @@ function disassociateAppNodes() {
   });
 }
 
-function addRemoteDevice(body: ReqBody, handle: string, wss: WebSocketServer): void {
+function addRemoteDevice(body: ReqBody, handle: string, wss: WebSocketServer): RemoteDevice {
   let device = new RemoteDevice(body, handle, wss);
   devices.set(handle, device);
 
@@ -37,6 +37,8 @@ function addRemoteDevice(body: ReqBody, handle: string, wss: WebSocketServer): v
   }
 
   mqttClient.publish(`${TOPICS.devices}/${devclass}`, JSON.stringify(devclasses.get(devclass)), true);
+
+  return device;
 }
 
 function removeRemoteDevice(handle: string): boolean {
