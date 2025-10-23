@@ -9,3 +9,4 @@ dist
 .env
 .DS_Store
 apps/public/media/carnaval/beijaflor.mp4
+yt-dlp/*
