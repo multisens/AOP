@@ -2,9 +2,9 @@ module.exports = {
     apps : [
         {
             name        : 'broker',
-            script      : '/opt/homebrew/sbin/mosquitto',
-            args        : '-c /opt/homebrew/etc/mosquitto/mosquitto.conf',
-            interpreter : 'none',
+            cwd         : './mosquitto',
+            script      : 'start-broker.sh',
+            interpreter : '/bin/bash',
             wait_ready  : true,
             autorestart : false
         },
@@ -20,21 +20,7 @@ module.exports = {
                 PORT            : 8080,
                 BROKER          : 'mqtt://localhost',
                 SCREENWIDTH     : 1440,
-                USER_DATA_PATH  : '/Users/joel/Coding/GingaDistrib/user-files'
-            }
-        },
-        {
-            name        : 'apps',
-            cwd         : './apps',
-            script      : 'npm',
-            args        : 'start',
-            interpreter : 'none',
-            wait_ready  : true,
-            autorestart : false,
-            env : {
-                PORT            : 8081,
-                BROKER          : 'mqtt://localhost',
-                USER_DATA_PATH  : '/Users/joel/Coding/GingaDistrib/user-files'
+                USER_DATA_PATH  : '../user-files'
             }
         },
         {
@@ -48,8 +34,8 @@ module.exports = {
                 PORT            : 44642,
                 BROKER          : 'mqtt://localhost',
                 SERVER_URL      : 'localhost',
-                USER_DATA_FILE  : '/Users/joel/Coding/GingaDistrib/user-files/userData.json',
-                USER_THUMBS     : '/Users/joel/Coding/GingaDistrib/user-files/thumbs'
+                USER_DATA_FILE  : '../user-files/userData.json',
+                USER_THUMBS     : '../user-files/thumbs'
             }
         }
     ]
