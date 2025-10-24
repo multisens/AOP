@@ -4,7 +4,7 @@ const express = require('express');
 const _PORT = process.env.PORT || 8080;
 
 // import modules routes
-const mod_frame = require('./modules/frame');
+const mod_disp = require('./modules/disp-lyr');
 const mod_load = require('./modules/load');
 const mod_profile = require('./modules/profile');
 const mod_dtvcat = require('./modules/dtv-catalog');
@@ -30,7 +30,7 @@ app.use(function (req, res, next) {
 app.use('/load', mod_load);
 app.use('/profile', mod_profile);
 app.use('/dtv', mod_dtvcat);
-app.use('/', mod_frame);
+app.use('/', mod_disp);
 
 app.listen(_PORT, () => {
     console.log(`AoP running on port: ${_PORT}`);

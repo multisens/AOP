@@ -1,7 +1,7 @@
 require('dotenv').config();
 const mqtt = require('mqtt');
 
-const client = mqtt.connect(process.env.BROKER, {
+const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {
     clientId : 'aop-client',
     clean : true,
     connectTimeout : 4000,
