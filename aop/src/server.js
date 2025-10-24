@@ -5,9 +5,8 @@ const _PORT = process.env.PORT || 8080;
 
 // import modules routes
 const mod_disp = require('./modules/disp-lyr');
-const mod_load = require('./modules/load');
 const mod_profile = require('./modules/profile');
-const mod_dtvcat = require('./modules/dtv-catalog');
+const mod_appcat = require('./modules/app-cat');
 
 // middleware configuration
 const app = express();
@@ -27,9 +26,8 @@ app.use(function (req, res, next) {
 });
 
 // use routes
-app.use('/load', mod_load);
 app.use('/profile', mod_profile);
-app.use('/dtv', mod_dtvcat);
+app.use('/appcat', mod_appcat);
 app.use('/', mod_disp);
 
 app.listen(_PORT, () => {
