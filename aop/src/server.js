@@ -34,8 +34,8 @@ app.listen(_PORT, () => {
     console.log(`AoP running on port: ${_PORT}`);
 });
 
-// start mqtt client
-const mqttClient = require('./mqtt-client');
+// start core component
+const core = require('./core');
 
 // notify loading is complete
 if (process.send) {
