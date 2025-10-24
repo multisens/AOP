@@ -1,23 +1,88 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>DTV</title>
-    <style>
-      .frame {
-        margin: 0;
-        height: 100%;
-        background-color: black;
-        z-index: 0;
-      }
-    </style>
-    <script src="/mqtt.min.js"></script>
-    <script src="/frame.js"></script>
-  </head>
-  <body class="frame" style="pointer-events: none;">
-    <iframe id="dtvFrame" style="width: 100%; height: 100vh; border: 0;"></iframe>
+    <head>
+        <title>DTV</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                background-color: rgb(40, 40, 40);
+                pointer-events: none;
+            }
+            .layers {
+                position: relative;
+                width: 100vw;
+                height: 100vh;
 
-    <script>
-      Init('<%= url %>');
-    </script>
-  </body>
+                * {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                border: none;
+                }
+            }
+            #video {
+                z-index: 1;
+            }
+            #graphics {
+                z-index: 2;
+            }
+            #rxgui {
+                z-index: 3;
+            }
+        </style>
+        <script src="/jquery-3.7.1.min.js"></script>
+        <script src="/mqtt.min.js"></script>
+        <script>
+            function connect(host) {
+                const client = mqtt.connect(`ws://${host}:9001/mqtt`, {
+                    clean: false,
+                    connectTimeout: 4000,
+                    clientId: 'rp-display',
+                });
+                client.on('connect', () => { subscribe_topics(client) });
+                client.on('message', (t, m) => { mqtt_message(client, t, m) });
+            }
+
+            function subscribe_topics(client) {
+                client.subscribe('aop/display/layers/+', { noLocal : true });
+                client.subscribe('aop/display/layers/video/+', { noLocal : true });
+            }
+
+            function mqtt_message(client, topic, message) {
+                let t = topic.replace('aop/display/layers/', '');
+                if (['graphics', 'rxgui'].includes(t)) {
+                  $(`#${t}`).attr('src', message.toString());
+                }
+                else if (t == 'video/url') {
+                  $('#video').attr('src', message.toString());
+                }
+                else if (t == 'video/size') {
+                  console.log(topic, JSON.parse(message));
+                  $('#video').css(JSON.parse(message));
+                }
+            }
+
+            function relay_key(e) {
+                e.preventDefault();
+                $('#graphics').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
+                $('#rxgui').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
+            }
+        </script>
+    </head>
+    <body>
+        <div class="layers">
+            <video id="video" autoplay muted playsinline></video>
+            <iframe id="graphics"></iframe>
+            <iframe id="rxgui"></iframe>
+        </div>
+
+        <script>
+            document.addEventListener('keydown', relay_key);
+            connect('<%= mqtt_host %>');
+        </script>
+    </body>
 </html> 

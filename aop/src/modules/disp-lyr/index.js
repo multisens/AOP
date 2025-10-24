@@ -1,10 +1,15 @@
+require('dotenv').config();
+const ejs = require('ejs');
 const express = require('express');
+const path = require('path');
 const router = express.Router();
 
-router.get('/', (req, res) => {
-    res.render('frame', {
-        url: 'http://localhost:8080/load'
-    });
+router.get('/', async (req, res) => {
+    const html = await ejs.renderFile(path.join(__dirname, 'view.ejs'),
+        {
+            mqtt_host: process.env.MQTT_HOST || 'localhost'
+        });
+    res.send(html);
 });
 
 module.exports = router;
