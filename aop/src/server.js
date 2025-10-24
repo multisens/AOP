@@ -5,7 +5,7 @@ const _PORT = process.env.PORT || 8080;
 
 // import modules routes
 const mod_disp = require('./modules/disp-lyr');
-const mod_profile = require('./modules/profile');
+const mod_prfchs = require('./modules/prf-chs');
 const mod_appcat = require('./modules/app-cat');
 
 // middleware configuration
@@ -26,7 +26,7 @@ app.use(function (req, res, next) {
 });
 
 // use routes
-app.use('/profile', mod_profile);
+app.use('/prfchs', mod_prfchs);
 app.use('/appcat', mod_appcat);
 app.use('/', mod_disp);
 
