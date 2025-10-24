@@ -6,6 +6,7 @@ function navigate(key) {
     let moveleft = $('.focused').attr('moveleft');
     let moveright = $('.focused').attr('moveright');
     let select = $('.focused').attr('select');
+    let param = $('.focused').attr('selectParam');
     
     switch(key) {
         case 'ArrowUp':
@@ -34,7 +35,12 @@ function navigate(key) {
             break;
         case 'Enter':
             if (typeof select !== 'undefined') {
-                window[select]();
+                if (typeof param !== 'undefined') {
+                    window[select](param);
+                }
+                else {
+                    window[select]();
+                }
             }
             break;
         default:
