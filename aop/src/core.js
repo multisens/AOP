@@ -74,6 +74,10 @@ function getUserData(uid) {
     return result;
 }
 
+function getUserList() {
+    return DATA.users;
+}
+
 function loadServiceList(message) {
 	DATA.serviceList = JSON.parse(message);
 }
@@ -87,5 +91,6 @@ module.exports = {
     setCurrentUser,
     getCurrentUser,
     getUserData,
+    getUserList,
     getServiceList
 }
