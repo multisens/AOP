@@ -10,14 +10,34 @@ const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {
 });
 
 const DATA = {
+    rxgui: {
+        current: '',
+        previous: ''
+    },
     currentUser: '',
     users: [],
+    currentService: '',
     serviceList: []
 };
 
+const GUI = {
+    app_catalogue: '/appcat',
+    profile_chooser: '/prfchs',
+    profile_creator: '/prfchs',
+    bootstrap_app: '/appcat'
+};
+
+const _t = {
+    current_user: 'aop/currentUser',
+    current_service: 'aop/currentService',
+    services: 'aop/services',
+    gui_layer: 'aop/display/layers/rxgui'
+};
+
 const _topics = new Map([
-  ['aop/currentUser', loadCurrentUser],
-  ['aop/services', loadServiceList]
+  [_t.current_user, loadCurrentUser],
+  [_t.current_service, loadCurrentService],
+  [_t.services, loadServiceList]
 ]);
 
 client.on('connect', () => {
@@ -38,6 +58,12 @@ client.on('message', (topic, message) => {
     }
 });
 
+function setDisplayGui(screen) {
+    client.publish(_t.gui_layer, screen);
+    DATA.rxgui.previous = DATA.rxgui.current;
+    DATA.rxgui.current = screen;
+}
+
 function loadUserData() {
     let userData = JSON.parse(fs.readFileSync(`${process.env.USER_DATA_PATH}/userData.json`));
     userData.users.forEach(usr => {
@@ -57,7 +83,7 @@ function loadCurrentUser(message) {
 
 function setCurrentUser(uid) {
     DATA.currentUser = uid.toString();
-    client.publish('aop/currentUser', uid.toString(), { retain : true });
+    client.publish(_t.current_user, uid.toString(), { retain : true });
 }
 
 function getCurrentUser() {
@@ -78,6 +104,15 @@ function getUserList() {
     return DATA.users;
 }
 
+function loadCurrentService(message) {
+    DATA.currentService = message.toString();
+}
+
+function setCurrentService(sid) {
+    DATA.currentService = sid.toString();
+    client.publish(_t.current_service, sid.toString(), { retain : true });
+}
+
 function loadServiceList(message) {
 	DATA.serviceList = JSON.parse(message);
 }
@@ -88,9 +123,12 @@ function getServiceList() {
 
 
 module.exports = {
+    GUI,
+    setDisplayGui,
     setCurrentUser,
     getCurrentUser,
     getUserData,
     getUserList,
+    setCurrentService,
     getServiceList
 }

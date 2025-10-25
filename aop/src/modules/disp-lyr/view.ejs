@@ -43,7 +43,10 @@
                     connectTimeout: 4000,
                     clientId: 'rp-display',
                 });
-                client.on('connect', () => { subscribe_topics(client) });
+                client.on('connect', () => {
+                    subscribe_topics(client);
+                    fetch('ready');
+                });
                 client.on('message', (t, m) => { mqtt_message(client, t, m) });
             }
 

@@ -1,3 +1,4 @@
+const core = require('../../core');
 require('dotenv').config();
 const ejs = require('ejs');
 const express = require('express');
@@ -10,6 +11,11 @@ router.get('/', async (req, res) => {
             mqtt_host: process.env.MQTT_HOST || 'localhost'
         });
     res.send(html);
+});
+
+router.get('/ready', (req, res) => {
+    core.setDisplayGui(core.GUI.profile_chooser);
+    res.status(200);
 });
 
 module.exports = router;

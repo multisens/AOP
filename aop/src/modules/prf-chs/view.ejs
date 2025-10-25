@@ -102,11 +102,11 @@
             document.addEventListener('keydown', (e) => {navigate(e.key)});
             
             function createProfile() {
-                console.log('create new profile');
+                fetch('<%= basepath %>/create');
             }
 
             function selectProfile(uid) {
-                console.log('select profile '+ uid);
+                fetch(`<%= basepath %>/select?id=${uid}`);
             }
         </script>
   </body>

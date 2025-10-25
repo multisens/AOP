@@ -1,7 +1,4 @@
 require('dotenv').config();
-const ejs = require('ejs');
-const fs = require('fs');
-const path = require('path');
 const core = require('../../core');
 
 

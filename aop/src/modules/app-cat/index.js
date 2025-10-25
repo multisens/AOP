@@ -1,3 +1,4 @@
+const core = require('../../core');
 const ejs = require('ejs');
 const express = require('express');
 const path = require('path');
@@ -8,9 +9,25 @@ router.get('/', async (req, res) => {
     const html = await ejs.renderFile(path.join(__dirname, 'view.ejs'),
         {
             cards: service.cards(),
-            profile: service.profile()
+            profile: service.profile(),
+            basepath: core.GUI.app_catalogue
         });
     res.send(html);
+});
+
+router.get('/profile', (req, res) => {
+    core.setDisplayGui(core.GUI.profile_chooser);
+    res.status(200);
+});
+
+router.get('/select', (req, res) => {
+    if (req.query.id) {
+        core.setCurrentService(req.query.id);
+        core.setDisplayGui(core.GUI.bootstrap_app);
+        res.status(200);
+        return;
+    }
+    res.status(400);
 });
 
 module.exports = router;

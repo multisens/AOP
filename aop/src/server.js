@@ -3,6 +3,9 @@ const express = require('express');
 
 const _PORT = process.env.PORT || 8080;
 
+// start core component
+const core = require('./core');
+
 // import modules routes
 const mod_disp = require('./modules/disp-lyr');
 const mod_prfchs = require('./modules/prf-chs');
@@ -26,16 +29,13 @@ app.use(function (req, res, next) {
 });
 
 // use routes
-app.use('/prfchs', mod_prfchs);
-app.use('/appcat', mod_appcat);
+app.use(core.GUI.profile_chooser, mod_prfchs);
+app.use(core.GUI.app_catalogue, mod_appcat);
 app.use('/', mod_disp);
 
 app.listen(_PORT, () => {
     console.log(`AoP running on port: ${_PORT}`);
 });
-
-// start core component
-const core = require('./core');
 
 // notify loading is complete
 if (process.send) {
