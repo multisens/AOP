@@ -10,25 +10,25 @@ function navigate(key) {
     
     switch(key) {
         case 'ArrowUp':
-            if (typeof moveup !== 'undefined') {
+            if (typeof moveup !== 'undefined' && $(`#${moveup}`).length > 0) {
                 $('.focused').removeClass('focused');
                 $(`#${moveup}`).addClass('focused');
             }
             break;
         case 'ArrowDown':
-            if (typeof movedown !== 'undefined') {
+            if (typeof movedown !== 'undefined' && $(`#${movedown}`).length > 0) {
                 $('.focused').removeClass('focused');
                 $(`#${movedown}`).addClass('focused');
             }
             break;
         case 'ArrowLeft':
-            if (typeof moveleft !== 'undefined') {
+            if (typeof moveleft !== 'undefined' && $(`#${moveleft}`).length > 0) {
                 $('.focused').removeClass('focused');
                 $(`#${moveleft}`).addClass('focused');
             }
             break;
         case 'ArrowRight':
-            if (typeof moveright !== 'undefined') {
+            if (typeof moveright !== 'undefined' && $(`#${moveright}`).length > 0) {
                 $('.focused').removeClass('focused');
                 $(`#${moveright}`).addClass('focused');
             }
