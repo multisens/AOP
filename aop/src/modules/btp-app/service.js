@@ -39,7 +39,7 @@ function esgData() {
 			contentDescription: esg.Service.Description.text,
 			genreColor: esg.Service.Genre.color,
 			genreTerm: esg.Service.Genre.term,
-			contentAdvisoryRatings: esg.Service.ContentAdvisoryRatings
+			contentAdvisoryRatings: `media/rating/${esg.Service.ContentAdvisoryRatings}.png`
 		}
 	} catch (error) {
 		return {
