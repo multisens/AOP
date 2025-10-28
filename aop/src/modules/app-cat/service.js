@@ -4,10 +4,11 @@ const core = require('../../core');
 function cards() {
 	var services = core.getServiceList();
 	var cards_in_line = 4;
-	var num = services.length;
-
+	var num = services.size;
+	
 	var html = '';
-	for(i = 0; i < num; i++) {
+	var i = 0;
+	services.forEach((lls, _) => {
 		let move = `moveleft="${i % cards_in_line == 0 ? "menumenu" : "card"+(i-1)}"`;
 		if (i % cards_in_line != cards_in_line - 1 && i + 1 < num) {
 			move += ` moveright="card${i+1}"`;
@@ -22,11 +23,12 @@ function cards() {
 			move += ` movedown="app${i + cards_in_line}"`;
 		}
 
-		html += `<div id="card${i}" class="card" ${move} select="selectService" selectParam="${services[i].serviceId}">` +
-					`<span>${services[i].serviceName}</span>` +
-					`<div class="logo">${services[i].serviceIcon}</div>` +
+		html += `<div id="card${i}" class="card" ${move} select="selectService" selectParam="${lls.bam.globalServiceId}">` +
+					`<span>${lls.bam.appName}</span>` +
+					`<div class="logo">${lls.bam.appIcon}</div>` +
 				`</div>`;
-	}
+		i++;
+	});
 	
 	return html;
 }

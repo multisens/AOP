@@ -10,6 +10,7 @@ const core = require('./core');
 const mod_disp = require('./modules/disp-lyr');
 const mod_prfchs = require('./modules/prf-chs');
 const mod_appcat = require('./modules/app-cat');
+const mod_btpapp = require('./modules/btp-app');
 
 // middleware configuration
 const app = express();
@@ -31,6 +32,7 @@ app.use(function (req, res, next) {
 // use routes
 app.use(core.GUI.profile_chooser, mod_prfchs);
 app.use(core.GUI.app_catalogue, mod_appcat);
+app.use(core.GUI.bootstrap_app, mod_btpapp);
 app.use('/', mod_disp);
 
 app.listen(_PORT, () => {

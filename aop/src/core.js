@@ -1,6 +1,5 @@
 require('dotenv').config();
 const fs = require('fs');
-const path = require('path');
 const mqtt = require('mqtt');
 
 const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {
@@ -17,43 +16,71 @@ const DATA = {
     currentUser: '',
     users: [],
     currentService: '',
-    serviceList: []
+    serviceList: new Map(),
+    serviceMetadata: {}
 };
 
 const GUI = {
     app_catalogue: '/appcat',
     profile_chooser: '/prfchs',
     profile_creator: '/prfchs',
-    bootstrap_app: '/appcat'
+    bootstrap_app: '/btpapp'
 };
 
 const _t = {
     current_user: 'aop/currentUser',
     current_service: 'aop/currentService',
-    services: 'aop/services',
-    gui_layer: 'aop/display/layers/rxgui'
+    lls_metadata: 'tlm/lls/#',
+    sls_metadata: 'tlm/sls/+/#',
+    gui_layer: 'aop/display/layers/rxgui',
+    pmplayer_url : 'aop/display/layers/video/url',
+    pmplayer_size : 'aop/display/layers/video/size'
 };
 
 const _topics = new Map([
-  [_t.current_user, loadCurrentUser],
-  [_t.current_service, loadCurrentService],
-  [_t.services, loadServiceList]
+    [_t.current_user, loadCurrentUser],
+    [_t.current_service, loadCurrentService],
+    [_t.lls_metadata, loadLLSMetadata]
 ]);
 
 client.on('connect', () => {
     console.log('Connected to MQTT broker');
     _topics.forEach((_, key) => {
-      client.subscribe(key, { noLocal : true });
+        client.subscribe(key, { noLocal : true });
     });
+
+    // Additional topics to handle, but no subscribe yet
+    _topics.set(_t.sls_metadata, loadSLSMetadata);
 
     loadUserData();
 });
 
+function mqttTopicMatch(topic, filter) {
+    let filterregex = filter.split('/').map(level => {
+        if (level === '+') {
+            return '[^/#+]+';
+        } else if (level === '#') {
+            return '.*';
+        } else {
+            return level.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+    }).join('/');
+
+    let regex = new RegExp(`^${filterregex}$`);
+    return regex.test(topic);
+}
+
 client.on('message', (topic, message) => {
-    if (_topics.has(topic)) {
-        _topics.get(topic)(message.toString());
-    }
-    else {
+    let found = false;
+    _topics.forEach((handler, filter) => {
+        if (mqttTopicMatch(topic, filter)) {
+            handler(message.toString(), topic);
+            found = true;
+            return;
+        }
+    });
+
+    if (!found) {
         console.log(`no handler for topic ${topic}`);
     }
 });
@@ -62,6 +89,19 @@ function setDisplayGui(screen) {
     client.publish(_t.gui_layer, screen);
     DATA.rxgui.previous = DATA.rxgui.current;
     DATA.rxgui.current = screen;
+}
+
+function setVideoURL(url = '') {
+    client.publish(_t.pmplayer_url, url);
+}
+
+function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
+    client.publish(_t.pmplayer_size, JSON.stringify({
+        top: top,
+        left: left,
+        width: width,
+        height: height
+    }));
 }
 
 function loadUserData() {
@@ -111,24 +151,69 @@ function loadCurrentService(message) {
 function setCurrentService(sid) {
     DATA.currentService = sid.toString();
     client.publish(_t.current_service, sid.toString(), { retain : true });
+    client.subscribe(_t.sls_metadata.replace('+', sid), { noLocal : true });
 }
 
-function loadServiceList(message) {
-	DATA.serviceList = JSON.parse(message);
+function unsetCurrentService() {
+    client.unsubscribe(_t.sls_metadata.replace('+', DATA.currentService), { noLocal : true });
+    client.publish(_t.current_service, '', { retain : true });
+    DATA.currentService = '';
+    DATA.serviceMetadata = {};
+}
+
+function getCurrentService() {
+    return DATA.serviceList.get(DATA.currentService);
+}
+
+function loadLLSMetadata(meta, topic) {
+    let lls = topic.split('/').at(-1);
+    let t = JSON.parse(meta);
+    if (lls == 'bamt') {
+        t.forEach(bam => {
+            if (DATA.serviceList.has(bam.globalServiceId)) {
+                DATA.serviceList.get(bam.globalServiceId).bam = bam;
+            }
+            else {
+                DATA.serviceList.set(bam.globalServiceId, { bam: bam });
+            }
+        });
+    }
 }
 
 function getServiceList() {
 	return DATA.serviceList;
 }
 
+function loadSLSMetadata(meta, topic) {
+    let sls = topic.split('/').at(-1);
+    let t = JSON.parse(meta);
+    if (sls == 'esg') {
+        DATA.serviceMetadata.esg = t;
+
+        // refresh the bootstrap app if its open
+        if (DATA.rxgui.current == GUI.bootstrap_app) {
+            setDisplayGui(GUI.bootstrap_app);
+        }
+    }
+}
+
+function getServiceSLS() {
+    return DATA.serviceMetadata;
+}
+
 
 module.exports = {
     GUI,
     setDisplayGui,
+    setVideoURL,
+    setVideoSize,
     setCurrentUser,
     getCurrentUser,
     getUserData,
     getUserList,
     setCurrentService,
-    getServiceList
+    unsetCurrentService,
+    getCurrentService,
+    getServiceList,
+    getServiceSLS
 }
