@@ -34,7 +34,8 @@ const _t = {
     sls_metadata: 'tlm/sls/+/#',
     gui_layer: 'aop/display/layers/rxgui',
     pmplayer_url : 'aop/display/layers/video/url',
-    pmplayer_size : 'aop/display/layers/video/size'
+    pmplayer_size : 'aop/display/layers/video/size',
+    graphics_layer: 'aop/display/layers/graphics'
 };
 
 const _topics = new Map([
@@ -89,6 +90,11 @@ function setDisplayGui(screen) {
     client.publish(_t.gui_layer, screen);
     DATA.rxgui.previous = DATA.rxgui.current;
     DATA.rxgui.current = screen;
+}
+
+function setDisplayGraphics(url = '') {
+    console.log(url)
+    client.publish(_t.graphics_layer, url);
 }
 
 function setVideoURL(url = '') {
@@ -166,6 +172,13 @@ function getCurrentService() {
 }
 
 function loadLLSMetadata(meta, topic) {
+    if (!meta || meta == '') {
+        DATA.serviceList.clear();
+        client.unsubscribe(_t.lls_metadata, { noLocal : true });
+        client.subscribe(_t.lls_metadata, { noLocal : true });
+        return;
+    }
+
     let lls = topic.split('/').at(-1);
     let t = JSON.parse(meta);
     if (lls == 'bamt') {
@@ -186,6 +199,15 @@ function getServiceList() {
 
 function loadSLSMetadata(meta, topic) {
     let sls = topic.split('/').at(-1);
+
+    if (!meta || meta == '') {
+        DATA.serviceMetadata[sls] = undefined;
+        if (sls == 'bald') {
+            DATA.serviceMetadata.baldHandler = undefined;
+        }
+        return;
+    }
+
     let t = JSON.parse(meta);
     if (sls == 'esg') {
         DATA.serviceMetadata.esg = t;
@@ -195,16 +217,28 @@ function loadSLSMetadata(meta, topic) {
             setDisplayGui(GUI.bootstrap_app);
         }
     }
+    else if (sls == 'bald') {
+        DATA.serviceMetadata.bald = t;
+
+        if (DATA.serviceMetadata.baldHandler) {
+            DATA.serviceMetadata.baldHandler(t);
+        }
+    }
 }
 
 function getServiceSLS() {
     return DATA.serviceMetadata;
 }
 
+function setBALDHandler(handler) {
+    DATA.serviceMetadata.baldHandler = handler;
+}
+
 
 module.exports = {
     GUI,
     setDisplayGui,
+    setDisplayGraphics,
     setVideoURL,
     setVideoSize,
     setCurrentUser,
@@ -215,5 +249,6 @@ module.exports = {
     unsetCurrentService,
     getCurrentService,
     getServiceList,
-    getServiceSLS
+    getServiceSLS,
+    setBALDHandler
 }

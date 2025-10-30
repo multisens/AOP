@@ -64,6 +64,25 @@ function closeBootstrapApp(gui) {
 function fullscreen() {
 	core.setDisplayGui('');
 	core.setVideoSize();
+	try {
+		startApp(core.getServiceSLS().bald);
+	} catch (error) {
+		core.setBALDHandler(startApp);
+	}
+}
+
+function startApp(bald) {
+	bald.forEach(entryPackage => {
+		if (!entryPackage.controlCode || entryPackage.controlCode == 'AUTOSTART'){
+			if (entryPackage.appType == 'TV30-Ginga-HTML5') {
+				// just load it in the graphics layer
+				core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl + entryPackage.bcastEntryPointUrl);
+			}
+			else if (entryPackage.appType == 'TV30-Ginga-NCL') {
+				// todo: use ncl component
+			}
+		}
+	});
 }
 
 

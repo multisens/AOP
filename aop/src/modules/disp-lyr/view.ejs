@@ -71,7 +71,11 @@
 
             function relay_key(e) {
                 e.preventDefault();
-                $('#graphics').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
+                try {
+                    $('#graphics').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
+                } catch(error) {
+                    $('#graphics')[0].contentWindow.postMessage(JSON.stringify({ type: 'keydown', key: e.key}), '*');
+                }
                 $('#rxgui').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
             }
         </script>
