@@ -13,6 +13,7 @@ const DATA = {
         current: '',
         previous: ''
     },
+    graphicsAppURL: '',
     currentUser: '',
     users: [],
     currentService: '',
@@ -92,9 +93,9 @@ function setDisplayGui(screen) {
     DATA.rxgui.current = screen;
 }
 
-function setDisplayGraphics(url = '') {
-    console.log(url)
-    client.publish(_t.graphics_layer, url);
+function setDisplayGraphics(baseUrl = '', epUrl = '') {
+    DATA.graphicsAppURL = baseUrl;
+    client.publish(_t.graphics_layer, baseUrl != '' ? `/graphicsAppProxy${epUrl}` : baseUrl);
 }
 
 function setVideoURL(url = '') {
@@ -234,6 +235,19 @@ function setBALDHandler(handler) {
     DATA.serviceMetadata.baldHandler = handler;
 }
 
+function getGraphicsAppURL() {
+    return DATA.graphicsAppURL;
+}
+
+function openServiceInfo() {
+    if (DATA.rxgui.current == '') {
+        setDisplayGui(`${GUI.bootstrap_app}?mode=info`);
+    }
+    if (DATA.graphicsAppURL != '') {
+        setDisplayGraphics();
+    }
+}
+
 
 module.exports = {
     GUI,
@@ -250,5 +264,7 @@ module.exports = {
     getCurrentService,
     getServiceList,
     getServiceSLS,
-    setBALDHandler
+    setBALDHandler,
+    getGraphicsAppURL,
+    openServiceInfo
 }

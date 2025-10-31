@@ -7,10 +7,12 @@ function profile() {
 	return html;
 }
 
-function openBootstrapApp() {
-	let bam = core.getCurrentService().bam;
-	if (bam.initialMediaURLs) {
-		core.setVideoURL(bam.initialMediaURLs[0]);
+function openBootstrapApp(mode) {
+	if (mode != 'info') {
+		let bam = core.getCurrentService().bam;
+		if (bam.initialMediaURLs) {
+			core.setVideoURL(bam.initialMediaURLs[0]);
+		}
 	}
 	core.setVideoSize('12%', '35%', '60%', '60%');
 }
@@ -76,7 +78,7 @@ function startApp(bald) {
 		if (!entryPackage.controlCode || entryPackage.controlCode == 'AUTOSTART'){
 			if (entryPackage.appType == 'TV30-Ginga-HTML5') {
 				// just load it in the graphics layer
-				core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl + entryPackage.bcastEntryPointUrl);
+				core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl, entryPackage.bcastEntryPointUrl);
 			}
 			else if (entryPackage.appType == 'TV30-Ginga-NCL') {
 				// todo: use ncl component
@@ -87,7 +89,7 @@ function startApp(bald) {
 
 
 module.exports = {
-    profile,
+	profile,
 	openBootstrapApp,
 	bootstrapAppData,
 	esgData,

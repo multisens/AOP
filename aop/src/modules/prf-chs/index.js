@@ -16,17 +16,17 @@ router.get('/', async (req, res, next) => {
 
 router.get('/create', (req, res) => {
     core.setDisplayGui(core.GUI.profile_creator);
-    res.status(200);
+    res.status(200).send();
 });
 
 router.get('/select', (req, res) => {
     if (req.query.id) {
         core.setCurrentUser(req.query.id);
         core.setDisplayGui(core.GUI.app_catalogue);
-        res.status(200);
+        res.status(200).send();
         return;
     }
-    res.status(400);
+    res.status(400).send();
 });
 
 

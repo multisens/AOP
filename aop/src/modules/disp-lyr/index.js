@@ -15,7 +15,25 @@ router.get('/', async (req, res) => {
 
 router.get('/ready', (req, res) => {
     core.setDisplayGui(core.GUI.profile_chooser);
-    res.status(200);
+    res.status(200).send();
+});
+
+router.get('/keydown/:keyCode', (req, res) => {
+    if (!req.params.keyCode) {
+        res.status(400).send();
+        return;
+    }
+
+    if (['27', '93'].includes(req.params.keyCode)) {
+        core.openServiceInfo();
+    }
+    else if (req.params.keyCode == '33') {
+        console.log('channel +');
+    }
+    else if (req.params.keyCode == '34') {
+        console.log('channel -');
+    }
+    res.status(200).send();
 });
 
 module.exports = router;

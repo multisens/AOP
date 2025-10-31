@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const _PORT = process.env.PORT || 8080;
 
@@ -34,6 +35,28 @@ app.use(core.GUI.profile_chooser, mod_prfchs);
 app.use(core.GUI.app_catalogue, mod_appcat);
 app.use(core.GUI.bootstrap_app, mod_btpapp);
 app.use('/', mod_disp);
+
+// proxy for graphics iframe
+const proxyMid = createProxyMiddleware({
+    target: '',
+    changeOrigin: true,
+    router: (req) => {
+        return core.getGraphicsAppURL();
+    },
+    pathRewrite: {
+        '^/graphicsAppProxy': ''
+    },
+    on: {
+        proxyReq: (proxyReq, req, res) => {
+            console.log(`Redirecting '${req.url}' to '${core.getGraphicsAppURL()}${proxyReq.path}'`);
+        },
+        error: (err, req, res) => {
+            console.error('GraphicsAppProxy Error:', err);
+            res.status(500).send('GraphicsAppProxy Error');
+        }
+    }
+});
+app.use('/graphicsAppProxy', proxyMid);
 
 app.listen(_PORT, () => {
     console.log(`AoP running on port: ${_PORT}`);

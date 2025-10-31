@@ -17,17 +17,17 @@ router.get('/', async (req, res) => {
 
 router.get('/profile', (req, res) => {
     core.setDisplayGui(core.GUI.profile_chooser);
-    res.status(200);
+    res.status(200).send();
 });
 
 router.get('/select', (req, res) => {
     if (req.query.id) {
         core.setCurrentService(req.query.id);
         core.setDisplayGui(core.GUI.bootstrap_app);
-        res.status(200);
+        res.status(200).send();
         return;
     }
-    res.status(400);
+    res.status(400).send();
 });
 
 module.exports = router;

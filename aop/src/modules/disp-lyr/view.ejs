@@ -64,19 +64,24 @@
                   $('#video').attr('src', message.toString());
                 }
                 else if (t == 'video/size') {
-                  console.log(topic, JSON.parse(message));
                   $('#video').css(JSON.parse(message));
                 }
             }
 
             function relay_key(e) {
                 e.preventDefault();
-                try {
-                    $('#graphics').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
-                } catch(error) {
-                    $('#graphics')[0].contentWindow.postMessage(JSON.stringify({ type: 'keydown', key: e.key}), '*');
+                if ([27, 33, 34, 93].includes(e.keyCode)) {
+                    // 27: Escape
+                    // 33, 34: PageUp, PageDown
+                    // 93: Windows Menu / Right ⌘ / ContextMenu / Esc
+                    fetch(`keydown/${e.keyCode}`);
                 }
-                $('#rxgui').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
+                else if ($('#rxgui').attr('src') != '') {
+                    $('#rxgui').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
+                }
+                else if ($('#graphics').attr('src') != '') {
+                    $('#graphics').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
+                }
             }
         </script>
     </head>
