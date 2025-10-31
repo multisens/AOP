@@ -16,12 +16,12 @@
                 height: 100vh;
 
                 * {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                border: none;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    border: none;
                 }
             }
             #video {
@@ -34,9 +34,15 @@
                 z-index: 3;
             }
         </style>
+        
+        <link href="https://vjs.zencdn.net/8.6.1/video-js.css" rel="stylesheet" />
         <script src="/js/jquery-3.7.1.min.js"></script>
         <script src="/js/mqtt.min.js"></script>
+        <script src="https://vjs.zencdn.net/8.6.1/video.min.js"></script>
+
         <script>
+            let player = null;
+
             function connect(host) {
                 const client = mqtt.connect(`ws://${host}:9001/mqtt`, {
                     clean: false,
@@ -53,19 +59,71 @@
             function subscribe_topics(client) {
                 client.subscribe('aop/display/layers/+', { noLocal : true });
                 client.subscribe('aop/display/layers/video/+', { noLocal : true });
+                client.subscribe('slt/sls/+/mpd', { noLocal: true });
+                client.subscribe('slt/sls/+/m3u8', { noLocal: true });
             }
 
             function mqtt_message(client, topic, message) {
                 let t = topic.replace('aop/display/layers/', '');
                 if (['graphics', 'rxgui'].includes(t)) {
-                  $(`#${t}`).attr('src', message.toString());
+                    $(`#${t}`).attr('src', message.toString());
                 }
                 else if (t == 'video/url') {
-                  $('#video').attr('src', message.toString());
+                    $('#video').attr('src', message.toString());
                 }
                 else if (t == 'video/size') {
-                  console.log(topic, JSON.parse(message));
-                  $('#video').css(JSON.parse(message));
+                    console.log(topic, JSON.parse(message));
+                    $('#video').css(JSON.parse(message));
+                }
+                else if (topic.startsWith('slt/sls/') && topic.endsWith('/mpd')) {
+                    try {
+                        const messageString = message.toString();
+                        const mediaData = JSON.parse(messageString);
+
+                        if (!player) {
+                            player = videojs('video', {
+                                controls: true,
+                                autoplay: true,
+                                muted: true,
+                                playsinline: true,
+                                techOrder: ['html5'] 
+                            });
+                        }
+
+                        const mediaUrl = mediaData.BaseURL + `playlist_1080p.mpd`;
+                        const mediaType = 'application/dash+xml';
+                        
+                        player.src({ src: mediaUrl, type: mediaType });
+                        player.play();
+
+                    } catch(err) {
+                        console.error('Erro ao processar DASH MPD:', err);
+                    }
+                }
+                else if (topic.startsWith('slt/sls/') && topic.endsWith('/m3u8')) {
+                    try {
+                        const messageString = message.toString();
+                        const mediaData = JSON.parse(messageString);
+
+                        if (!player) {
+                            player = videojs('video', {
+                                controls: true,
+                                autoplay: true,
+                                muted: true,
+                                playsinline: true,
+                                techOrder: ['html5'] 
+                            });
+                        }
+
+                        const mediaUrl = mediaData.BaseURL + `playlist_1080p.m3u8`;
+                        const mediaType = 'application/x-mpegURL';
+                        
+                        player.src({ src: mediaUrl, type: mediaType });
+                        player.play();
+
+                    } catch(err) {
+                        console.error('Erro ao processar HLS M3U8:', err);
+                    }
                 }
             }
 
@@ -78,18 +136,16 @@
                 }
                 $('#rxgui').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
             }
+
+            document.addEventListener('keydown', relay_key);
+            connect('<%= mqtt_host %>');
         </script>
     </head>
     <body>
         <div class="layers">
-            <video id="video" autoplay muted playsinline></video>
+            <video id="video" class="video-js" autoplay muted playsinline></video>
             <iframe id="graphics"></iframe>
             <iframe id="rxgui"></iframe>
         </div>
-
-        <script>
-            document.addEventListener('keydown', relay_key);
-            connect('<%= mqtt_host %>');
-        </script>
     </body>
-</html> 
+</html>
