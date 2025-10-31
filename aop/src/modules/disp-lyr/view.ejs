@@ -16,12 +16,12 @@
                 height: 100vh;
 
                 * {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                border: none;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    border: none;
                 }
             }
             #video {
@@ -34,9 +34,15 @@
                 z-index: 3;
             }
         </style>
+        
+        <link href="/css/video-js.css" rel="stylesheet" />
         <script src="/js/jquery-3.7.1.min.js"></script>
         <script src="/js/mqtt.min.js"></script>
+        <script src="/js/video.min.js"></script>
+
         <script>
+            let player = null;
+
             function connect(host) {
                 const client = mqtt.connect(`ws://${host}:9001/mqtt`, {
                     clean: false,
@@ -55,16 +61,58 @@
                 client.subscribe('aop/display/layers/video/+', { noLocal : true });
             }
 
+            function instance_player(mediaUrl, mediaType) {
+                if (!player) {
+                    player = videojs('video', {
+                        controls: true,
+                        autoplay: true,
+                        muted: true,
+                        playsinline: true,
+                        techOrder: ['html5'] 
+                    });
+                    
+                    player.src({ src: mediaUrl, type: mediaType });
+                    player.play();
+                }
+            }
+
+            function set_video_url(url) {
+                if (url == '') {
+                    if (player) player = undefined;
+                    $('#video').attr('src', '');
+                    return;
+                }
+
+                let mediaType = '';
+                if (url.endsWith('mpd')) {
+                    mediaType = 'application/dash+xml';
+                }
+                else if (url.endsWith('m3u8')) {
+                    mediaType = 'application/x-mpegURL';
+                }
+
+                if (mediaType) {
+                    try {
+                        instance_player(url, mediaType);
+                    } catch(err) {
+                        console.error('Error while processing DASH MPD/HLS M3U8:', err);
+                    }
+                }
+                else {
+                    $('#video').attr('src', url);
+                }
+            }
+
             function mqtt_message(client, topic, message) {
                 let t = topic.replace('aop/display/layers/', '');
                 if (['graphics', 'rxgui'].includes(t)) {
-                  $(`#${t}`).attr('src', message.toString());
+                    $(`#${t}`).attr('src', message.toString());
                 }
                 else if (t == 'video/url') {
-                  $('#video').attr('src', message.toString());
+                    set_video_url(message.toString());
                 }
                 else if (t == 'video/size') {
-                  $('#video').css(JSON.parse(message));
+                    $('#video').css(JSON.parse(message));
                 }
             }
 
@@ -87,7 +135,7 @@
     </head>
     <body>
         <div class="layers">
-            <video id="video" autoplay muted playsinline></video>
+            <video id="video" class="video-js" autoplay muted playsinline></video>
             <iframe id="graphics"></iframe>
             <iframe id="rxgui"></iframe>
         </div>
@@ -97,4 +145,4 @@
             connect('<%= mqtt_host %>');
         </script>
     </body>
-</html> 
+</html>
