@@ -78,8 +78,16 @@
 
             function set_video_url(url) {
                 if (url == '') {
-                    if (player) player = undefined;
-                    $('#video').attr('src', '');
+                    if (player && !player.isDisposed()) {
+                        player.dispose(true);
+                        player = null;
+                    }
+                    if ($('#video').length > 0) {
+                        $('#video').replaceWith('<video id="video" class="video-js" autoplay muted playsinline></video>');
+                    }
+                    else {
+                        $('#main').prepend('<video id="video" class="video-js" autoplay muted playsinline></video>');
+                    }
                     return;
                 }
 
@@ -134,7 +142,7 @@
         </script>
     </head>
     <body>
-        <div class="layers">
+        <div id="main" class="layers">
             <video id="video" class="video-js" autoplay muted playsinline></video>
             <iframe id="graphics"></iframe>
             <iframe id="rxgui"></iframe>

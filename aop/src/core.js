@@ -14,6 +14,7 @@ const DATA = {
         previous: ''
     },
     graphicsAppURL: '',
+    videoStreamURL: '',
     currentUser: '',
     users: [],
     currentService: '',
@@ -99,7 +100,14 @@ function setDisplayGraphics(baseUrl = '', epUrl = '') {
 }
 
 function setVideoURL(url = '') {
-    client.publish(_t.pmplayer_url, url);
+    if (url.endsWith('m3u8') || url.endsWith('mpd')) {
+        let file = url.split('/').pop();
+        DATA.videoStreamURL = url.replace(`/${file}`, '');
+        client.publish(_t.pmplayer_url, `/videoStreamProxy/${file}`);
+    }
+    else {
+        client.publish(_t.pmplayer_url, url);
+    }
 }
 
 function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
@@ -239,6 +247,10 @@ function getGraphicsAppURL() {
     return DATA.graphicsAppURL;
 }
 
+function getVideoStreamURL() {
+    return DATA.videoStreamURL;
+}
+
 function openServiceInfo() {
     if (DATA.rxgui.current == '') {
         setDisplayGui(`${GUI.bootstrap_app}?mode=info`);
@@ -266,5 +278,6 @@ module.exports = {
     getServiceSLS,
     setBALDHandler,
     getGraphicsAppURL,
+    getVideoStreamURL,
     openServiceInfo
 }

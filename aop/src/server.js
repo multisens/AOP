@@ -37,7 +37,7 @@ app.use(core.GUI.bootstrap_app, mod_btpapp);
 app.use('/', mod_disp);
 
 // proxy for graphics iframe
-const proxyMid = createProxyMiddleware({
+const proxyGraphics = createProxyMiddleware({
     target: '',
     changeOrigin: true,
     router: (req) => {
@@ -56,7 +56,28 @@ const proxyMid = createProxyMiddleware({
         }
     }
 });
-app.use('/graphicsAppProxy', proxyMid);
+app.use('/graphicsAppProxy', proxyGraphics);
+
+const proxyStream = createProxyMiddleware({
+    target: '',
+    changeOrigin: true,
+    router: (req) => {
+        return core.getVideoStreamURL();
+    },
+    pathRewrite: {
+        '^/videoStreamProxy': ''
+    },
+    on: {
+        proxyReq: (proxyReq, req, res) => {
+            // console.log(`Redirecting '${req.url}' to '${core.getGraphicsAppURL()}${proxyReq.path}'`);
+        },
+        error: (err, req, res) => {
+            console.error('VideoStreamProxy Error:', err);
+            res.status(500).send('VideoStreamProxy Error');
+        }
+    }
+});
+app.use('/videoStreamProxy', proxyStream);
 
 app.listen(_PORT, () => {
     console.log(`AoP running on port: ${_PORT}`);
