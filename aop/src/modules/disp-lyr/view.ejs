@@ -59,6 +59,7 @@
             function subscribe_topics(client) {
                 client.subscribe('aop/display/layers/+', { noLocal : true });
                 client.subscribe('aop/display/layers/video/+', { noLocal : true });
+                client.subscribe('video/event', { noLocal : true });
             }
 
             function instance_player(mediaUrl, mediaType) {
@@ -73,6 +74,18 @@
                     
                     player.src({ src: mediaUrl, type: mediaType });
                     player.play();
+
+                    player.on('timeupdate', (p) => {
+                        $('#graphics').contents()[0].dispatchEvent(new CustomEvent('timeupdate', { detail: player.currentTime() }));
+                    });
+
+                    player.on('error', () => {
+                        console.warn('Player error — restarting...');
+                        setTimeout(() => {
+                            player.src({ src: mediaUrl, type: mediaType });
+                            player.play();
+                        }, 500);
+                    });
                 }
             }
 
@@ -112,6 +125,10 @@
             }
 
             function mqtt_message(client, topic, message) {
+                if (topic == 'video/event') {
+                    $('#graphics').contents()[0].dispatchEvent(new CustomEvent('stream_event', { detail: message }));
+                }
+
                 let t = topic.replace('aop/display/layers/', '');
                 if (['graphics', 'rxgui'].includes(t)) {
                     $(`#${t}`).attr('src', message.toString());
