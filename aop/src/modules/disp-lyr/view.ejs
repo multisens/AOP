@@ -168,6 +168,13 @@
         <script>
             document.addEventListener('keydown', relay_key);
             connect('<%= mqtt_host %>');
+
+            const video = document.getElementById("video");
+            setInterval(() => {
+                const time = video.currentTime;
+                const iframe = document.getElementById("graphics");
+                iframe.contentWindow.postMessage({ time }, "*");
+            }, 1000);
         </script>
     </body>
 </html>
