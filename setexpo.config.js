@@ -32,7 +32,7 @@ module.exports = {
             env: {
                 PORT: 44642,
                 BROKER: 'mqtt://localhost',
-                SERVER_URL: 'localhost',
+                SERVER_URL: '192.168.68.100',
                 // SERVER_URL: '192.168.0.148',
                 USER_DATA_FILE: '../user-files/userData.json',
                 USER_THUMBS: '../user-files/thumbs'
