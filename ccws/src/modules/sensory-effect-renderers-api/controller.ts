@@ -50,7 +50,6 @@ function POSTControlRenderer(req: Request, res: Response): void {
     });
     return;
   }
-
   const body = req.body;
   if (!body || !body.effectType || !body.action) {
     res.status(400).json({
