@@ -1,4 +1,5 @@
 import * as dotenv from "dotenv";
+import os from 'os';
 import mqttClient, { TOPICS } from "./mqtt-client";
 import { AppNode } from "./modules/remotedevice-manager/remote-device";
 import { associateAppNodes, disassociateAppNodes } from "./modules/remotedevice-manager/manager";
@@ -7,6 +8,7 @@ dotenv.config();
 type CoreData = {
   server: {
     url: string;
+    localIP: string;
   };
   app: {
     sid: string;
@@ -31,7 +33,8 @@ type CoreData = {
 
 const data: CoreData = {
   server: {
-    url: process.env.SERVER_URL as string
+    url: process.env.SERVER_URL as string,
+    localIP: getLocalIP()
   },
   app: {
     sid: "",
@@ -48,6 +51,22 @@ const data: CoreData = {
     originalNetworkId: "09e59a1d-e2e7-467e-85db-2fb5a572e2fc",
   },
 };
+
+function getLocalIP(): string {
+    const interfaces = os.networkInterfaces();
+
+    for (const name of Object.keys(interfaces)) {
+      const ifaceList = interfaces[name];
+      if (!ifaceList) continue;
+
+      for (const iface of ifaceList) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          return iface.address;
+        }
+      }
+    }
+    return '127.0.0.1';
+}
 
 function setAppId(appid: string): void {
   if (!appid) return;
