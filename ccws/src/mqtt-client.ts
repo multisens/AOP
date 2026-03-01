@@ -3,7 +3,7 @@ import mqtt, { MqttClient } from 'mqtt';
 dotenv.config();
 
 let brokerUrl: string = process.env.BROKER as string;
-const client: MqttClient = mqtt.connect(brokerUrl, {
+export const client: MqttClient = mqtt.connect(brokerUrl, {
     clientId : 'tv3ws-client',
     clean : true,
     connectTimeout : 4000,
