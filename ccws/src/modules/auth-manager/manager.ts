@@ -49,7 +49,14 @@ export function getClientRefreshToken(id: string): string {
     throw Error(`Client ${id} is not authorized.`);
 }
 
-export function saveClientChallenge(id: string, challenge: string) {
+export function updateClientRefreshToken(id: string): string {
+    if (authorizedClients.has(id)) {
+        return authorizedClients.get(id)?.updateRefreshToken() as string;
+    }
+    throw Error(`Client ${id} is not authorized.`);
+}
+
+export function saveClientChallengeAndKey(id: string, challenge: string, key: Buffer<ArrayBufferLike>) {
     if (authorizedClients.has(id)) {
         return authorizedClients.get(id)?.setChallenge(challenge);
     }
@@ -63,8 +70,15 @@ export function getClientChallenge(id: string): string {
     throw Error(`Client ${id} is not authorized.`);
 }
 
+export function getClientSimmKey(id: string): Buffer<ArrayBufferLike> {
+    if (authorizedClients.has(id)) {
+        return authorizedClients.get(id)?.getSimmKey() as Buffer<ArrayBufferLike>;
+    }
+    throw Error(`Client ${id} is not authorized.`);
+}
 
-function createAccessToken(alg: TokenAlg, expires: number = 3600) {
+
+function createAccessToken(alg: TokenAlg, expires: number = 3600): string {
     const now = Math.floor(Date.now() / 1000);
     const payload: TokenPayload = {
         iat: now,
@@ -74,6 +88,27 @@ function createAccessToken(alg: TokenAlg, expires: number = 3600) {
     }
 
     return jwt.sign(payload, jwtSecret, { algorithm: alg as any });
+}
+
+
+export function getClientAccessToken(id: string): [string, number] {
+    if (authorizedClients.has(id)) {
+        const client = authorizedClients.get(id) as Client;
+        let expire = 24 * 60 * 60;
+        let token = '';
+
+        if (client.hasAccessToken()) {
+            token = client.getAccessToken();
+            const payload = jwt.verify(token, jwtSecret) as TokenPayload;
+            expire = payload.exp;
+        }
+        else {
+            token = createAccessToken('HS256', expire);
+            client.setAccessToken(token);
+        }
+        return [token, expire];
+    }
+    throw Error(`Client ${id} is not authorized.`);
 }
 
 
@@ -90,6 +125,20 @@ export function validateAccessToken(token: string) {
         }
 
         jwt.verify(token, jwtSecret, { algorithms: [header.alg as any], issuer: jwtIssuer });
+
+        // const now = Math.floor(Date.now() / 1000);
+            
+        // if (payload.nbf && now < payload.nbf) {
+        //     return false;
+        // }
+        
+        // if (payload.exp && now >= payload.exp) {
+        //     return false;
+        // }
+        
+        // if (payload.iat && now < payload.iat) {
+        //     return false;
+        // }
         
         return true;
     }

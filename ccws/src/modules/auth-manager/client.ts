@@ -5,6 +5,8 @@ export default class Client {
     protected id: string;
     protected refreshToken: string;
     protected challenge?: string;
+    protected simm_key?: Buffer<ArrayBufferLike>;
+    protected accessToken?: string;
 
     constructor(id: string) {
         this.id = id;
@@ -28,8 +30,28 @@ export default class Client {
         this.challenge = str;
     }
 
-    public getChallenge() {
+    public getChallenge(): string {
         return this.challenge as string;
+    }
+
+    public setSimmKey(key: Buffer<ArrayBufferLike>) {
+        this.simm_key = key;
+    }
+
+    public getSimmKey(): Buffer<ArrayBufferLike> {
+        return this.simm_key as Buffer<ArrayBufferLike>;
+    }
+
+    public setAccessToken(token: string) {
+        this.accessToken = token;
+    }
+
+    public hasAccessToken(): boolean {
+        return this.accessToken !== undefined;
+    }
+
+    public getAccessToken(): string {
+        return this.accessToken as string;
     }
 
     protected createRefreshToken(): string {

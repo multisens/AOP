@@ -10,4 +10,10 @@ const router: Router = express.Router();
 router.get('/authorize', controller.GETAuthorize);
 
 
+/*
+    C.6.1.3 Obtaining the access token
+*/
+router.get('/token', controller.GETToken);
+
+
 export default router;

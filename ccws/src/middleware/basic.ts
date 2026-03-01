@@ -15,7 +15,7 @@ router.use((req: Request, res: Response, next: NextFunction) => {
     if (!validateAcceptVersion(req, res)) return;
 
     // Avoid access validation for authorization API
-    if (req.path === '/authorize') {
+    if (req.path === '/authorize' || req.path === '/token') {
         return next();
     }
 

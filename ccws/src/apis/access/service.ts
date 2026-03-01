@@ -4,7 +4,7 @@ import logger from '../../logger';
 import * as manager from '../../modules/auth-manager/manager'
 import { base64UrlEncode, base64UrlDecode, sha256Encrypt, aes128ECBEncrypt } from '../../util';
 
-export const pairingMethods: string[] = ['qrcode'];
+export const pairingMethods: string[] = ['qrcode'];//, 'kex'];
 
 async function askAuthorization(displayName: string): Promise<boolean> {
     const message = `A aplicação "${displayName}" deseja acessar as informações do sinal de TV Digital.\nVocê deseja autorizar isto?`;
@@ -25,7 +25,7 @@ function generateQRCodeChallenge(clientId: string) {
 
     // Random 16 bytes string for challenge
     const randomString = crypto.randomBytes(16);
-    manager.saveClientChallenge(clientId, sha256Encrypt(randomString).toString());
+    manager.saveClientChallengeAndKey(clientId, sha256Encrypt(randomString).toString(), shaKey);
 
     // Encrypt random string using AES-128 ECB with PKCS#7 padding using SHA-256 key
     const encrypted = aes128ECBEncrypt(randomString, shaKey);
@@ -34,9 +34,13 @@ function generateQRCodeChallenge(clientId: string) {
     return base64UrlEncode(encrypted);
 }
 
-function validateChallengeResponse(clientId: string, challange_response: string) {
+function validateRefreshToken(clientId: string, refreshToken: string): boolean {
+    return refreshToken == manager.getClientRefreshToken(clientId);
+}
+
+function validateChallengeResponse(clientId: string, challange_response: string): boolean {
     const response = base64UrlDecode(challange_response).toString();
     return response == manager.getClientChallenge(clientId);
 }
 
-export default { askAuthorization, generateQRCodeChallenge, validateChallengeResponse }
+export default { askAuthorization, generateQRCodeChallenge, validateRefreshToken, validateChallengeResponse }
