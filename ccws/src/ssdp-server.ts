@@ -5,7 +5,7 @@ import core from './core';
 dotenv.config();
 
 const httpPort = process.env.HTTP_PORT || 44642;
-const httpsPort = process.env.HTTP_PORT || 44643;
+const httpsPort = process.env.HTTPS_PORT || 44643;
 const brandName = process.env.BRAND_NAME || 'GenericBrand';
 const model = process.env.MODEL || 'GenericModel';
 const friendlyName = process.env.FRIENDLY_NAME || 'TV 3.0 Receiver';

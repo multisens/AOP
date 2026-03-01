@@ -4,7 +4,7 @@ dotenv.config();
 
 import app from './app';
 const server = http.createServer(app);
-const _PORT = process.env.PORT || 44642;
+const _PORT = process.env.HTTP_PORT || 44642;
 
 import ssdpServer from './ssdp-server';
 server.listen(_PORT, () => {
