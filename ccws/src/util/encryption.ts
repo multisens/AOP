@@ -31,8 +31,14 @@ export function aes128ECBEncrypt(data: Buffer<ArrayBufferLike>, key: Buffer<Arra
 }
 
 export function aes128ECBDecrypt(data: Buffer<ArrayBufferLike>, key: Buffer<ArrayBufferLike>): Buffer<ArrayBufferLike> {
-        const decipher = crypto.createDecipheriv('aes-128-ecb', key, null);
-        decipher.setAutoPadding(true);
-        let decrypted = decipher.update(data);
-        return Buffer.concat([decrypted, decipher.final()]);
-    }
+    const decipher = crypto.createDecipheriv('aes-128-ecb', key, null);
+    decipher.setAutoPadding(true);
+    let decrypted = decipher.update(data);
+    return Buffer.concat([decrypted, decipher.final()]);
+}
+
+export function createECDHKeys(): [crypto.ECDH, Buffer<ArrayBufferLike>] {
+	const privateKey = crypto.createECDH('prime256v1');
+	const publicKey = privateKey.generateKeys();
+	return [privateKey, publicKey];
+}

@@ -28,7 +28,6 @@ export function isBlocked(id: string): boolean {
     return blockedClients.includes(id);
 }
 
-
 export function isAuthorized(id: string): boolean {
     return authorizedClients.has(id);
 }
@@ -42,37 +41,9 @@ export function BlockClient(id: string) {
     blockedClients.push(id);
 }
 
-export function getClientRefreshToken(id: string): string {
+export function GetAuthorizedClient(id: string): Client {
     if (authorizedClients.has(id)) {
-        return authorizedClients.get(id)?.getRefreshToken() as string;
-    }
-    throw Error(`Client ${id} is not authorized.`);
-}
-
-export function updateClientRefreshToken(id: string): string {
-    if (authorizedClients.has(id)) {
-        return authorizedClients.get(id)?.updateRefreshToken() as string;
-    }
-    throw Error(`Client ${id} is not authorized.`);
-}
-
-export function saveClientChallengeAndKey(id: string, challenge: string, key: Buffer<ArrayBufferLike>) {
-    if (authorizedClients.has(id)) {
-        return authorizedClients.get(id)?.setChallenge(challenge);
-    }
-    throw Error(`Client ${id} is not authorized.`);
-}
-
-export function getClientChallenge(id: string): string {
-    if (authorizedClients.has(id)) {
-        return authorizedClients.get(id)?.getChallenge() as string;
-    }
-    throw Error(`Client ${id} is not authorized.`);
-}
-
-export function getClientSimmKey(id: string): Buffer<ArrayBufferLike> {
-    if (authorizedClients.has(id)) {
-        return authorizedClients.get(id)?.getSimmKey() as Buffer<ArrayBufferLike>;
+        return authorizedClients.get(id)!;
     }
     throw Error(`Client ${id} is not authorized.`);
 }

@@ -169,6 +169,7 @@ mqttClient.addTopicHandler(TOPICS.services, loadServiceData);
 const _t = {
     yesno_popup: 'aop/display/popup/yesno',
     qrcode_popup: 'aop/display/popup/qrcode',
+    pin_popup: 'aop/display/popup/pin',
 };
 
 type subscribeFunction = (m: string, t: string) => void;
@@ -255,8 +256,14 @@ export function showYesNoPopUpAsync(message: string, timeout: number = 1000): Pr
 
 export function showQRCodePopUp(code: string, timeout: number) {
     logger.info(`Calling QRCode popup with code:\n${code}\nTimeout in ${timeout}ms`);
-    const msg = JSON.stringify({ code: code, timeout: timeout });
+    const msg = JSON.stringify({ value: code, timeout: timeout });
     client.publish(_t.qrcode_popup, msg);
+}
+
+export function showPINPopUp(pin: string, timeout: number) {
+    logger.info(`Calling PIN popup with pin:\n${pin}\nTimeout in ${timeout}ms`);
+    const msg = JSON.stringify({ value: pin, timeout: timeout });
+    client.publish(_t.pin_popup, msg);
 }
 
 export default data;

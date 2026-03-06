@@ -1,10 +1,10 @@
 import * as crypto from 'crypto';
+import Client from '../../modules/auth-manager/client';
 import * as core from '../../core';
 import logger from '../../logger';
-import * as manager from '../../modules/auth-manager/manager'
-import { base64UrlEncode, base64UrlDecode, sha256Encrypt, aes128ECBEncrypt } from '../../util';
+import { base64UrlEncode, base64UrlDecode, sha256Encrypt, aes128ECBEncrypt, createECDHKeys } from '../../util';
 
-export const pairingMethods: string[] = ['qrcode'];//, 'kex'];
+export const pairingMethods: string[] = ['qrcode', 'kex'];
 
 async function askAuthorization(displayName: string): Promise<boolean> {
     const message = `A aplicação "${displayName}" deseja acessar as informações do sinal de TV Digital.\nVocê deseja autorizar isto?`;
@@ -13,7 +13,8 @@ async function askAuthorization(displayName: string): Promise<boolean> {
     return response;
 }
 
-function generateQRCodeChallenge(clientId: string) {
+function generateQRCodeSecret(client: Client): Buffer<ArrayBufferLike> {
+    // Generate random string
     const simm_key = crypto.randomBytes(32);
     
     // Use key to create QR Code
@@ -21,26 +22,43 @@ function generateQRCodeChallenge(clientId: string) {
     core.showQRCodePopUp(base64Key, 1000);
 
     // Applies SHA-256 to key and get the 128 most significative bits
-    const shaKey = sha256Encrypt(simm_key).subarray(0, 16);
+    const secret = sha256Encrypt(simm_key).subarray(0, 16);
+    client.setSecret(secret);
+    return secret;
+}
 
+function generatePINSecret(client: Client, key: string): Buffer<ArrayBufferLike> {
+    // Generate the ECDH key pair
+    const [privateKey, publicKey] = createECDHKeys();
+    client.setECDHKeys(privateKey, publicKey);
+
+    // Get the key to derive the shared secret
+    const clientKey = base64UrlDecode(key);
+    let simm_key = privateKey.computeSecret(clientKey);
+    simm_key = sha256Encrypt(simm_key);
+    
+    // Use key to create PIN
+    const bigIntKey = BigInt('0x' + simm_key.toString('hex'));
+    const bigInt10k = BigInt(10000);
+    const pin = Number(bigIntKey % bigInt10k);
+    core.showPINPopUp(pin.toString(), 1000);
+
+    // Applies SHA-256 to key and get the 128 most significative bits
+    const secret = simm_key.subarray(0, 16);
+    client.setSecret(secret);
+    return secret;
+}
+
+function generateChallenge(client: Client, secret: Buffer<ArrayBufferLike>) {
     // Random 16 bytes string for challenge
     const randomString = crypto.randomBytes(16);
-    manager.saveClientChallengeAndKey(clientId, sha256Encrypt(randomString).toString(), shaKey);
+    client.setChallenge(sha256Encrypt(randomString).toString());
 
     // Encrypt random string using AES-128 ECB with PKCS#7 padding using SHA-256 key
-    const encrypted = aes128ECBEncrypt(randomString, shaKey);
+    const encrypted = aes128ECBEncrypt(randomString, secret);
 
     // return challenge using safe base64 string
     return base64UrlEncode(encrypted);
 }
 
-function validateRefreshToken(clientId: string, refreshToken: string): boolean {
-    return refreshToken == manager.getClientRefreshToken(clientId);
-}
-
-function validateChallengeResponse(clientId: string, challange_response: string): boolean {
-    const response = base64UrlDecode(challange_response).toString();
-    return response == manager.getClientChallenge(clientId);
-}
-
-export default { askAuthorization, generateQRCodeChallenge, validateRefreshToken, validateChallengeResponse }
+export default { askAuthorization, generateQRCodeSecret, generatePINSecret, generateChallenge }
