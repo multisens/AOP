@@ -167,9 +167,9 @@ function loadServiceData(m: string): void {
 mqttClient.addTopicHandler(TOPICS.services, loadServiceData);
 
 const _t = {
-    yesno_popup: 'aop/display/popup/yesno',
-    qrcode_popup: 'aop/display/popup/qrcode',
-    pin_popup: 'aop/display/popup/pin',
+    yesno_popup: 'aop/display/layers/popup/yesno',
+    qrcode_popup: 'aop/display/layers/popup/qrcode',
+    pin_popup: 'aop/display/layers/popup/pin',
 };
 
 type subscribeFunction = (m: string, t: string) => void;
@@ -250,7 +250,8 @@ export function showYesNoPopUpAsync(message: string, timeout: number = 1000): Pr
             wrapup(Boolean(m));
         };
         subscribe(responseTopic, callback);
-        client.publish(messageTopic, message);
+        const msg = JSON.stringify({ value: message, timeout: timeout });
+        client.publish(messageTopic, msg);
     });
 }
 
