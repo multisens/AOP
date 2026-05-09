@@ -1,0 +1,42 @@
+name: Bump submodule aop em TV30
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout TV30 (super-projeto)
+        uses: actions/checkout@v4
+        with:
+          repository: multisens/TV30
+          token: ${{ secrets.TV30_REPO_TOKEN }}
+          submodules: false
+          fetch-depth: 0
+
+      - name: Atualizar ponteiro do submodule aop
+        env:
+          AOP_SHA: ${{ github.sha }}
+        run: |
+          set -e
+          git config user.name  "Luis Claudio Ribeiro Junior"
+          git config user.email "luis.junior@ons.org.br"
+
+          # Inicializa apenas o submodule aop (sem clonar todos)
+          git submodule update --init --no-recursive aop
+
+          # Move o submodule pro sha exato deste push do AOP
+          git -C aop fetch origin "$AOP_SHA"
+          git -C aop checkout "$AOP_SHA"
+
+          if git diff --quiet aop; then
+            echo "Ponteiro ja aponta pra $AOP_SHA — sem mudancas"
+            exit 0
+          fi
+
+          SHA_SHORT=$(git -C aop rev-parse --short HEAD)
+          git add aop
+          git commit -m "chore: bump submodule aop pra ${SHA_SHORT}"
+          git push origin main
