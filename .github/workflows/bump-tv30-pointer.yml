@@ -24,19 +24,14 @@ jobs:
           git config user.name  "Luis Claudio Ribeiro Junior"
           git config user.email "luis.junior@ons.org.br"
 
-          # Inicializa apenas o submodule aop (sem clonar todos)
-          git submodule update --init --no-recursive aop
-
-          # Move o submodule pro sha exato deste push do AOP
-          git -C aop fetch origin "$AOP_SHA"
-          git -C aop checkout "$AOP_SHA"
-
-          if git diff --quiet aop; then
-            echo "Ponteiro ja aponta pra $AOP_SHA — sem mudancas"
+          CURRENT=$(git ls-tree HEAD aop | awk '{print $3}')
+          if [ "$CURRENT" = "$AOP_SHA" ]; then
+            echo "Ponteiro ja em $AOP_SHA — sem mudancas"
             exit 0
           fi
 
-          SHA_SHORT=$(git -C aop rev-parse --short HEAD)
-          git add aop
-          git commit -m "chore: bump submodule aop pra ${SHA_SHORT}"
+          echo "Atualizando ponteiro do submodule aop: $CURRENT -> $AOP_SHA"
+          git update-index --cacheinfo 160000 "$AOP_SHA" aop
+
+          git commit -m "chore: bump submodule aop pra ${AOP_SHA:0:7}"
           git push origin main
