@@ -22,7 +22,7 @@ jobs:
         run: |
           set -e
           git config user.name  "Luis Claudio Ribeiro Junior"
-          git config user.email "luis.junior@ons.org.br"
+          git config user.email "luis.claudio.r.jr@gmail.com"
 
           CURRENT=$(git ls-tree HEAD aop | awk '{print $3}')
           if [ "$CURRENT" = "$AOP_SHA" ]; then
