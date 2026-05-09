@@ -8,7 +8,8 @@ const router = express.Router();
 router.get('/', async (req, res) => {
     const html = await ejs.renderFile(path.join(__dirname, 'view.ejs'),
         {
-            mqtt_host: process.env.MQTT_HOST || 'localhost'
+            mqtt_host: process.env.MQTT_HOST || 'localhost',
+            mqtt_ws_port: process.env.MQTT_WS_PORT || '9001'
         });
     res.send(html);
 });

@@ -135,7 +135,7 @@
             let publishTopic = null;
 
             function connect(host) {
-                const client = mqtt.connect(`ws://${host}:9001/mqtt`, {
+                const client = mqtt.connect(`ws://${host}:<%= mqtt_ws_port %>/mqtt`, {
                     clean: false,
                     connectTimeout: 4000,
                     clientId: 'rp-display',
@@ -269,7 +269,10 @@
 
         <script>
             document.addEventListener('keydown', relay_key);
-            connect('<%= mqtt_host %>');
+            // Browser perspective: use o hostname pelo qual o usuario abriu a pagina
+            // (localhost, IP da LAN, etc.) — nao o env MQTT_HOST do server, que pode
+            // ser um nome de service Docker so resolvivel dentro do container.
+            connect(window.location.hostname || '<%= mqtt_host %>');
 
             const video = document.getElementById("video");
             setInterval(() => {
