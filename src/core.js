@@ -43,7 +43,8 @@ const _t = {
 const _topics = new Map([
     [_t.current_user, loadCurrentUser],
     [_t.current_service, loadCurrentService],
-    [_t.lls_metadata, loadLLSMetadata]
+    [_t.lls_metadata, loadLLSMetadata],
+    ['aop/users', () => loadUserData()]
 ]);
 
 client.on('connect', () => {
@@ -119,17 +120,48 @@ function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
     }));
 }
 
-function loadUserData() {
-    let userData = JSON.parse(fs.readFileSync(`${process.env.USER_DATA_PATH}/userData.json`));
-    userData.users.forEach(usr => {
-        DATA.users.push({
-            id: usr.id,
-            name: usr.name,
-            avatar: usr.avatar
+async function loadUserData(attempt = 1) {
+    // Source-of-truth: Redis (via CCWS). userData.json eh apenas seed inicial
+    // que o CCWS popula no Redis em initFromRedis quando users:index esta vazio.
+    const ccwsBase = process.env.CCWS_URL || 'http://ccws:44652';
+    try {
+        const listRes = await fetch(`${ccwsBase}/tv3/current-service/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ and: [] })
         });
-    });
+        if (!listRes.ok) throw new Error(`CCWS list HTTP ${listRes.status}`);
+        const list = await listRes.json();
+        const ids = (list.users || []).map(u => u.id).filter(Boolean);
 
-    setCurrentUser(DATA.users[0].id);
+        const details = await Promise.all(ids.map(async id => {
+            try {
+                const r = await fetch(`${ccwsBase}/tv3/current-service/users/${encodeURIComponent(id)}`);
+                if (!r.ok) return { id, name: id, avatar: null };
+                const d = await r.json();
+                return { id, name: d.nickname || d.name || id, avatar: d.avatar || null };
+            } catch {
+                return { id, name: id, avatar: null };
+            }
+        }));
+
+        DATA.users.length = 0;
+        details.forEach(u => DATA.users.push(u));
+
+        if (DATA.users.length > 0 && !DATA.currentUser) {
+            setCurrentUser(DATA.users[0].id);
+        }
+        console.log(`Loaded ${DATA.users.length} users from CCWS`);
+    } catch (err) {
+        // CCWS pode demorar pra subir. Retry ate 5x com backoff.
+        if (attempt < 5) {
+            const delay = attempt * 2000;
+            console.log(`Falha carregando users do CCWS (tentativa ${attempt}/${5}, retry em ${delay}ms): ${err.message}`);
+            setTimeout(() => loadUserData(attempt + 1), delay);
+        } else {
+            console.error(`Desistindo de carregar users do CCWS apos ${attempt} tentativas: ${err.message}`);
+        }
+    }
 }
 
 function loadCurrentUser(message) {
