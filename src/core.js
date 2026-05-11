@@ -25,7 +25,7 @@ const DATA = {
 const GUI = {
     app_catalogue: '/appcat',
     profile_chooser: '/prfchs',
-    profile_creator: '/prfchs',
+    profile_creator: '/profile/create',
     bootstrap_app: '/btpapp'
 };
 
@@ -283,6 +283,13 @@ function getVideoStreamURL() {
     return DATA.videoStreamURL;
 }
 
+// Publica em aop/users com o path do diretorio de userData. CCWS sincroniza
+// pro Redis e AoP recarrega DATA.users. Chamado quando algo cria/edita
+// userData.json (ex: mod_prfmngr.createUser).
+function notifyUsersChanged() {
+    client.publish('aop/users', process.env.USER_DATA_PATH || '/user-files', { qos: 1 });
+}
+
 function openServiceInfo() {
     if (DATA.rxgui.current == '') {
         setDisplayGui(`${GUI.bootstrap_app}?mode=info`);
@@ -311,5 +318,6 @@ module.exports = {
     setBALDHandler,
     getGraphicsAppURL,
     getVideoStreamURL,
-    openServiceInfo
+    openServiceInfo,
+    notifyUsersChanged
 }
