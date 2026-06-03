@@ -1,4 +1,19 @@
 require('dotenv').config();
+
+// Fail-fast: garante que envs obrigatorias estao setadas antes de qualquer
+// inicializacao (MQTT, HTTP server, modules). Se faltar alguma, loga claro
+// e termina com exit 1 — evita erros confusos tarde no boot (ex: cliente
+// MQTT tentando conectar em 'mqtt://undefined').
+function assertEnv(required) {
+    const missing = required.filter(k => !process.env[k] || String(process.env[k]).trim() === '');
+    if (missing.length) {
+        console.error(`[boot] missing required env vars: ${missing.join(', ')}`);
+        console.error(`[boot] check docker-compose.yml or .env`);
+        process.exit(1);
+    }
+}
+assertEnv(['MQTT_HOST', 'CCWS_URL', 'USER_DATA_PATH']);
+
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
