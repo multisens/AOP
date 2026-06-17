@@ -85,7 +85,19 @@ const proxyStream = createProxyMiddleware({
     },
     on: {
         proxyReq: (proxyReq, req, res) => {
-            // console.log(`Redirecting '${req.url}' to '${core.getGraphicsAppURL()}${proxyReq.path}'`);
+            if (req.path.endsWith('.m3u8')) {
+                proxyReq.setHeader('Cache-Control', 'no-cache');
+                proxyReq.setHeader('Pragma', 'no-cache');
+            }
+        },
+        proxyRes: (proxyRes, req, res) => {
+            if (req.path.endsWith('.m3u8')) {
+                proxyRes.headers['cache-control'] = 'no-store, no-cache, must-revalidate';
+                proxyRes.headers['pragma'] = 'no-cache';
+                delete proxyRes.headers['expires'];
+                delete proxyRes.headers['etag'];
+                delete proxyRes.headers['last-modified'];
+            }
         },
         error: (err, req, res) => {
             console.error('VideoStreamProxy Error:', err);
