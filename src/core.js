@@ -319,5 +319,6 @@ module.exports = {
     getGraphicsAppURL,
     getVideoStreamURL,
     openServiceInfo,
-    notifyUsersChanged
+    notifyUsersChanged,
+    loadUserData
 }

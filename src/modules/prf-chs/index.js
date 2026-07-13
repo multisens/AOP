@@ -6,6 +6,15 @@ const router = express.Router();
 const service = require('./service');
 
 router.get('/', async (req, res, next) => {
+    // O profile-chooser roda SEM service ativo (o telespectador ainda vai
+    // escolher o perfil). Limpa qualquer aop/currentService retido — que pode
+    // ter ficado preso no broker apos um restart — e recarrega a lista completa
+    // do CCWS. Sem isso, o filtro de consent do CCWS esconde todos os perfis e
+    // o chooser aparece vazio. O guard resolveActiveService no CCWS cobre a
+    // corrida (a limpeza do retido eh assincrona via MQTT).
+    core.unsetCurrentService();
+    await core.loadUserData();
+
     const html = await ejs.renderFile(path.join(__dirname, 'view.ejs'),
         {
             cards: service.cards(),
