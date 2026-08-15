@@ -100,6 +100,42 @@ function setDisplayGraphics(baseUrl = '', epUrl = '') {
     client.publish(_t.graphics_layer, baseUrl != '' ? `/graphicsAppProxy${epUrl}` : baseUrl);
 }
 
+// Point the graphics layer at the AOP-hosted NCL4 player (INTEGRATION.md Part 3).
+// Unlike the HTML5 branch, the player is served *by AOP itself* (public/nclplayer),
+// so this publishes a same-origin URL directly — no /graphicsAppProxy hop. The
+// player never learns its mode: identifiers and the broker endpoint ride the query
+// string, which the player prioritises over ./config.json (Parts 1 & 3).
+//
+//   service_id / app_id -> topic root aop/<service_id>/<app_id>/doc/#. These must
+//     match the ids the engine launches under (its SERVICE_ID/APP_ID). In Part 3's
+//     static launch that alignment is configured (engine .env); Part 4 makes it live.
+//   broker_ws_url       -> TV30's shared Mosquitto WS listener (…:<MQTT_WS_PORT>/mqtt).
+//   base_url            -> where the app bundle's media is fetched. Same-origin
+//     /nclbundle proxy (server.js) -> NCL4's player-service, which still serves the
+//     media in Part 3. Part 4 moves bundle delivery to bcast.
+function setDisplayNclPlayer(serviceId = '', appId = '') {
+    if (serviceId == '' || appId == '') {
+        // Nothing to launch; clear the layer like setDisplayGraphics('').
+        DATA.graphicsAppURL = '';
+        client.publish(_t.graphics_layer, '');
+        return;
+    }
+    const wsPort = process.env.MQTT_WS_PORT || '9001';
+    const brokerWsUrl = process.env.MQTT_WS_URL || `ws://localhost:${wsPort}/mqtt`;
+    const baseUrl = process.env.NCL_BUNDLE_BASE_URL || '/nclbundle';
+    const params = new URLSearchParams({
+        service_id: serviceId,
+        app_id: appId,
+        broker_ws_url: brokerWsUrl,
+        base_url: baseUrl
+    });
+    const url = `/nclplayer/?${params.toString()}`;
+    // Mark the graphics layer occupied so openServiceInfo() can clear it, mirroring
+    // setDisplayGraphics. The value isn't a proxy target here, just an occupancy flag.
+    DATA.graphicsAppURL = url;
+    client.publish(_t.graphics_layer, url);
+}
+
 function setVideoURL(url = '') {
     if (url.endsWith('m3u8') || url.endsWith('mpd')) {
         let file = url.split('/').pop();
@@ -304,6 +340,7 @@ module.exports = {
     GUI,
     setDisplayGui,
     setDisplayGraphics,
+    setDisplayNclPlayer,
     setVideoURL,
     setVideoSize,
     setCurrentUser,

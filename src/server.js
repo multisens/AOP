@@ -45,6 +45,19 @@ app.use(function (req, res, next) {
     next();
 });
 
+// Dynamic config.json for the AOP-hosted NCL4 player (INTEGRATION.md Part 3).
+// The player fetches ./config.json (relative) = /nclplayer/config.json; there is
+// no such static file, so this route answers. It carries the integrated-mode
+// broker WS URL and bundle base; per-app service_id/app_id ride the iframe query
+// string (which the player prioritises), so they are omitted here on purpose.
+app.get('/nclplayer/config.json', (req, res) => {
+    const wsPort = process.env.MQTT_WS_PORT || '9001';
+    res.json({
+        broker_ws_url: process.env.MQTT_WS_URL || `ws://localhost:${wsPort}/mqtt`,
+        base_url: process.env.NCL_BUNDLE_BASE_URL || '/nclbundle'
+    });
+});
+
 // use routes
 app.use(core.GUI.profile_chooser, mod_prfchs);
 app.use('/profile', mod_prfmngr);
@@ -73,6 +86,28 @@ const proxyGraphics = createProxyMiddleware({
     }
 });
 app.use('/graphicsAppProxy', proxyGraphics);
+
+// Same-origin proxy for the NCL app's media bundle (INTEGRATION.md Part 3).
+// The AOP-hosted player resolves media against base_url=/nclbundle, so requests
+// stay same-origin (no CORS — render.js fetch()es 'text' media). AOP forwards
+// them to NCL4's player-service, which still serves the bundle in Part 3; Part 4
+// moves bundle delivery to bcast. Target host is fixed (env-overridable), unlike
+// the dynamic graphics proxy.
+const nclPlayerService = process.env.NCL_PLAYER_SERVICE_URL || 'http://ncl4-player:7855';
+const proxyNclBundle = createProxyMiddleware({
+    target: nclPlayerService,
+    changeOrigin: true,
+    pathRewrite: {
+        '^/nclbundle': '/bundle'
+    },
+    on: {
+        error: (err, req, res) => {
+            console.error('NclBundleProxy Error:', err);
+            res.status(500).send('NclBundleProxy Error');
+        }
+    }
+});
+app.use('/nclbundle', proxyNclBundle);
 
 const proxyStream = createProxyMiddleware({
     target: '',

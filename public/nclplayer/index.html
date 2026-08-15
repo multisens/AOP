@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<!--
+  AOP-hosted NCL4 player page (integrated mode).
+
+  This HTML is the *host* AOP serves into the receiver's #graphics iframe. It is
+  NOT NCL4's own debug page (NCL4/player/index.html): that one is a two-column
+  dev harness with a broker-monitor panel and a bordered, centred stage. Here the
+  stage is full-bleed and transparent so the player composites over AOP's #video
+  layer, and the debug elements the bundle expects (#connection-status, #logs)
+  are present-but-hidden so the unchanged player.js never dereferences a null.
+
+  Only *who serves the player* differs between modes (INTEGRATION.md Part 3):
+  NCL4's player.js bundle below is copied verbatim from NCL4 and is never edited.
+  Refresh it with:  cp ../NCL4/player/player.js aop/public/nclplayer/player.js
+
+  Identifiers/broker come from the iframe query string (service_id, app_id,
+  broker_ws_url, base_url), which the player prioritises over ./config.json
+  (INTEGRATION.md Parts 1 & 3). config.json is still served (dynamically, by
+  aop/src/server.js) as the integrated-mode fallback.
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCL Player</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            /* Transparent so AOP's #video layer (z1) shows through the player. */
+            background: transparent;
+        }
+
+        /* Full-bleed stage: NCL media (.ncl-media) is absolutely positioned by
+           region against this box, so it must cover the whole viewport. */
+        #stage {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            overflow: hidden;
+        }
+
+        .ncl-media {
+            position: absolute;
+            object-fit: contain;
+        }
+
+        .ncl-text {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #fff;
+            font-size: 1.4em;
+            background: rgba(0, 0, 0, 0.45);
+            padding: 0 12px;
+            box-sizing: border-box;
+        }
+
+        /* The bundle gates loadConfig()+initMQTT() behind an #overlay click (a
+           user gesture, for audio autoplay). The receiver is keyboard-only and
+           dispatches no click, so we click it programmatically on load (see
+           script below). Kept invisible; it vanishes the instant it is clicked. */
+        #overlay {
+            position: fixed;
+            inset: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+        #overlay.hidden { display: none; }
+
+        /* Debug elements the bundle's ui.js grabs at load. Present so it never
+           hits a null; hidden because the receiver has no debug surface. */
+        #connection-status, #logs { display: none; }
+    </style>
+</head>
+<body>
+    <div id="stage"></div>
+
+    <!-- present-but-hidden host chrome required by the unchanged player bundle -->
+    <div id="overlay"></div>
+    <span id="connection-status" class="disconnected"></span>
+    <div id="logs"></div>
+
+    <script src="player.js"></script>
+    <script>
+        // Auto-start: the bundle only boots on an #overlay click. Fire one after
+        // the bundle has bound its listener so the player connects and renders
+        // without a user gesture in the receiver. (Audio autoplay may still be
+        // gated by the browser until a real gesture; rendering is unaffected.)
+        window.addEventListener('load', () => {
+            const overlay = document.getElementById('overlay');
+            if (overlay) overlay.click();
+        });
+    </script>
+</body>
+</html>

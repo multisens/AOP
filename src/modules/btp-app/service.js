@@ -94,7 +94,19 @@ function startApp(bald) {
 				core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl, entryPackage.bcastEntryPointUrl);
 			}
 			else if (entryPackage.appType == 'TV30-Ginga-NCL') {
-				// todo: use ncl component
+				// Serve the AOP-hosted NCL4 player into #graphics (INTEGRATION.md Part 3).
+				//
+				// Identifier mapping (BALD entryPackage -> player/engine, the bridge to Part 4):
+				//   app_id     <- entryPackage.appId (the app's id within the service).
+				//   service_id <- the current service. BALD entries carry no serviceId
+				//     field (bcast/src/types.ts), so it comes from the service context
+				//     the BALD belongs to. These are the ids the topic root
+				//     aop/<service_id>/<app_id>/doc/# is built from, and must match the
+				//     engine's launch target (its SERVICE_ID/APP_ID). In Part 3's static
+				//     launch that match is configured; Part 4a makes it live.
+				const serviceId = core.getCurrentService();
+				const appId = entryPackage.appId;
+				core.setDisplayNclPlayer(serviceId, appId);
 			}
 		}
 	});
