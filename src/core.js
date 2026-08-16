@@ -18,6 +18,7 @@ const DATA = {
     currentUser: '',
     users: [],
     currentService: '',
+    currentApp: '',
     serviceList: new Map(),
     serviceMetadata: {}
 };
@@ -95,45 +96,55 @@ function setDisplayGui(screen) {
     DATA.rxgui.current = screen;
 }
 
-function setDisplayGraphics(baseUrl = '', epUrl = '') {
-    DATA.graphicsAppURL = baseUrl;
-    client.publish(_t.graphics_layer, baseUrl != '' ? `/graphicsAppProxy${epUrl}` : baseUrl);
+// Retained lifecycle topics consumed by CCWS and (for NCL) the engine; same for
+// every app type. graphicsAppURL is the origin /graphicsAppProxy forwards to.
+function publishCurrentApp(serviceId, appId, packageUrl, epUrl) {
+    const pathUrl = `${packageUrl}${epUrl}`;
+    client.publish(`aop/${serviceId}/currentApp`, appId, { retain: true });
+    client.publish(`aop/${serviceId}/${appId}/path`, pathUrl, { retain: true });
+    DATA.currentApp = appId;
+    DATA.graphicsAppURL = packageUrl;
 }
 
-// Point the graphics layer at the AOP-hosted NCL4 player (INTEGRATION.md Part 3).
-// Unlike the HTML5 branch, the player is served *by AOP itself* (public/nclplayer),
-// so this publishes a same-origin URL directly — no /graphicsAppProxy hop. The
-// player never learns its mode: identifiers and the broker endpoint ride the query
-// string, which the player prioritises over ./config.json (Parts 1 & 3).
-//
-//   service_id / app_id -> topic root aop/<service_id>/<app_id>/doc/#. These must
-//     match the ids the engine launches under (its SERVICE_ID/APP_ID). In Part 3's
-//     static launch that alignment is configured (engine .env); Part 4 makes it live.
-//   broker_ws_url       -> TV30's shared Mosquitto WS listener (…:<MQTT_WS_PORT>/mqtt).
-//   base_url            -> where the app bundle's media is fetched. Same-origin
-//     /nclbundle proxy (server.js) -> NCL4's player-service, which still serves the
-//     media in Part 3. Part 4 moves bundle delivery to bcast.
-function setDisplayNclPlayer(serviceId = '', appId = '') {
-    if (serviceId == '' || appId == '') {
-        // Nothing to launch; clear the layer like setDisplayGraphics('').
-        DATA.graphicsAppURL = '';
-        client.publish(_t.graphics_layer, '');
+// Clearing retained currentApp stops the engine; emptying the layer drops the iframe.
+function clearCurrentApp() {
+    if (DATA.currentApp != '') {
+        client.publish(`aop/${DATA.currentService}/currentApp`, '', { retain: true });
+        client.publish(`aop/${DATA.currentService}/${DATA.currentApp}/path`, '', { retain: true });
+        DATA.currentApp = '';
+    }
+    DATA.graphicsAppURL = '';
+    client.publish(_t.graphics_layer, '');
+}
+
+// HTML5 app: browser runs it directly, loaded via /graphicsAppProxy.
+function setDisplayGraphics(serviceId = '', appId = '', packageUrl = '', epUrl = '') {
+    if (packageUrl == '') {
+        clearCurrentApp();
         return;
     }
+    publishCurrentApp(serviceId, appId, packageUrl, epUrl);
+    client.publish(_t.graphics_layer, `/graphicsAppProxy${epUrl}`);
+}
+
+// NCL app: browser can't run NCL, so the iframe loads the AOP-hosted player, which
+// fetches media via /graphicsAppProxy. The engine fetches the bundle from `path`.
+function startNclApp(serviceId = '', appId = '', packageUrl = '', epUrl = '') {
+    if (serviceId == '' || appId == '') {
+        clearCurrentApp();
+        return;
+    }
+    publishCurrentApp(serviceId, appId, packageUrl, epUrl);
+
     const wsPort = process.env.MQTT_WS_PORT || '9001';
     const brokerWsUrl = process.env.MQTT_WS_URL || `ws://localhost:${wsPort}/mqtt`;
-    const baseUrl = process.env.NCL_BUNDLE_BASE_URL || '/nclbundle';
     const params = new URLSearchParams({
         service_id: serviceId,
         app_id: appId,
         broker_ws_url: brokerWsUrl,
-        base_url: baseUrl
+        base_url: `/graphicsAppProxy${epUrl}`
     });
-    const url = `/nclplayer/?${params.toString()}`;
-    // Mark the graphics layer occupied so openServiceInfo() can clear it, mirroring
-    // setDisplayGraphics. The value isn't a proxy target here, just an occupancy flag.
-    DATA.graphicsAppURL = url;
-    client.publish(_t.graphics_layer, url);
+    client.publish(_t.graphics_layer, `/nclplayer/?${params.toString()}`);
 }
 
 function setVideoURL(url = '') {
@@ -238,6 +249,7 @@ function setCurrentService(sid) {
 }
 
 function unsetCurrentService() {
+    clearCurrentApp();
     client.unsubscribe(_t.sls_metadata.replace('+', DATA.currentService), { noLocal : true });
     client.publish(_t.current_service, '', { retain : true });
     DATA.currentService = '';
@@ -246,6 +258,10 @@ function unsetCurrentService() {
 
 function getCurrentService() {
     return DATA.serviceList.get(DATA.currentService);
+}
+
+function getCurrentServiceId() {
+    return DATA.currentService;
 }
 
 function loadLLSMetadata(meta, topic) {
@@ -330,8 +346,8 @@ function openServiceInfo() {
     if (DATA.rxgui.current == '') {
         setDisplayGui(`${GUI.bootstrap_app}?mode=info`);
     }
-    if (DATA.graphicsAppURL != '') {
-        setDisplayGraphics();
+    if (DATA.currentApp != '') {
+        clearCurrentApp();
     }
 }
 
@@ -340,7 +356,8 @@ module.exports = {
     GUI,
     setDisplayGui,
     setDisplayGraphics,
-    setDisplayNclPlayer,
+    startNclApp,
+    clearCurrentApp,
     setVideoURL,
     setVideoSize,
     setCurrentUser,
@@ -350,6 +367,7 @@ module.exports = {
     setCurrentService,
     unsetCurrentService,
     getCurrentService,
+    getCurrentServiceId,
     getServiceList,
     getServiceSLS,
     setBALDHandler,
