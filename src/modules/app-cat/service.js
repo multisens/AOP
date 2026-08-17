@@ -34,8 +34,8 @@ function cards() {
 		else {
 			move += ` moveup="card${i - cards_in_line}"`;
 		}
-		if (i + cards_in_line <= num) {
-			move += ` movedown="app${i + cards_in_line}"`;
+		if (i + cards_in_line < num) {
+			move += ` movedown="card${i + cards_in_line}"`;
 		}
 
 		html += `<div id="card${i}" class="card" ${move} select="selectService" selectParam="${lls.bam.globalServiceId}">` +
