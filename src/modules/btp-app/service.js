@@ -77,6 +77,12 @@ function closeBootstrapApp(gui) {
 
 function fullscreen() {
   core.setDisplayGui("");
+  // Imagem estatica e so preview da tela de bootstrap: sai antes do fullscreen,
+  // ao contrario do feed ao vivo, que continua rodando atras da app.
+  const initial = core.getCurrentService()?.bam?.initialMediaURLs?.[0];
+  if (initial && core.isStillImageURL(initial)) {
+    core.setVideoURL();
+  }
   core.setVideoSize();
   try {
     startApp(core.getServiceSLS().bald);

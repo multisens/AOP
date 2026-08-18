@@ -147,8 +147,17 @@ function startNclApp(serviceId = '', appId = '', packageUrl = '', epUrl = '') {
     client.publish(_t.graphics_layer, `/nclplayer/?${params.toString()}`);
 }
 
+// Apps sem feed ao vivo (ex.: NCL) mandam uma imagem estatica no lugar do stream.
+const STILL_IMAGE_EXT = /\.(jpe?g|png|webp|gif)$/i;
+
+function isStillImageURL(url = '') {
+    return STILL_IMAGE_EXT.test(url);
+}
+
 function setVideoURL(url = '') {
-    if (url.endsWith('m3u8') || url.endsWith('mpd')) {
+    // Stream e imagem estatica passam pelo /videoStreamProxy: a URL do bcast
+    // (ex.: bcast:8081) so resolve dentro da rede Docker, nao no browser.
+    if (url.endsWith('m3u8') || url.endsWith('mpd') || STILL_IMAGE_EXT.test(url)) {
         let file = url.split('/').pop();
         DATA.videoStreamURL = url.replace(`/${file}`, '');
         client.publish(_t.pmplayer_url, `/videoStreamProxy/${file}`);
@@ -358,6 +367,7 @@ module.exports = {
     setDisplayGraphics,
     startNclApp,
     clearCurrentApp,
+    isStillImageURL,
     setVideoURL,
     setVideoSize,
     setCurrentUser,

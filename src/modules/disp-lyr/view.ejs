@@ -182,18 +182,32 @@
                 }
             }
 
+            // Volta pro <video> vazio, descartando o player (e o poster) anterior.
+            function reset_video_element() {
+                if (player && !player.isDisposed()) {
+                    player.dispose(true);
+                    player = null;
+                }
+                if ($('#video').length > 0) {
+                    $('#video').replaceWith('<video id="video" class="video-js" autoplay muted playsinline></video>');
+                }
+                else {
+                    $('#main').prepend('<video id="video" class="video-js" autoplay muted playsinline></video>');
+                }
+            }
+
             function set_video_url(url) {
                 if (url == '') {
-                    if (player && !player.isDisposed()) {
-                        player.dispose(true);
-                        player = null;
-                    }
-                    if ($('#video').length > 0) {
-                        $('#video').replaceWith('<video id="video" class="video-js" autoplay muted playsinline></video>');
-                    }
-                    else {
-                        $('#main').prepend('<video id="video" class="video-js" autoplay muted playsinline></video>');
-                    }
+                    reset_video_element();
+                    return;
+                }
+
+                // Apps sem feed ao vivo (ex.: NCL) mandam uma imagem estatica. O
+                // video.js nao toca imagem, entao ela entra como poster de um
+                // <video> sem source — mantendo o mesmo layer, z-index e tamanho.
+                if (/\.(jpe?g|png|webp|gif)$/i.test(url)) {
+                    reset_video_element();
+                    $('#video').attr('poster', url).css('object-fit', 'contain');
                     return;
                 }
 
