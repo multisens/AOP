@@ -123,7 +123,7 @@ function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
 async function loadUserData(attempt = 1) {
     // Source-of-truth: Redis (via CCWS). userData.json eh apenas seed inicial
     // que o CCWS popula no Redis em initFromRedis quando users:index esta vazio.
-    const ccwsBase = process.env.CCWS_URL || 'http://ccws:44652';
+    const ccwsBase =  (process.env.TV3WS_URL || process.env.CCWS_URL) || 'http://tv3ws:44652';
     try {
         const listRes = await fetch(`${ccwsBase}/tv3/current-service/users`, {
             method: 'POST',
