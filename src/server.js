@@ -12,7 +12,12 @@ function assertEnv(required) {
         process.exit(1);
     }
 }
-assertEnv(['MQTT_HOST', 'CCWS_URL', 'USER_DATA_PATH']);
+// TV3WS_URL (novo nome, R1) com fallback pro legado CCWS_URL
+if (!process.env.TV3WS_URL && !process.env.CCWS_URL) {
+    console.error('[boot] faltando TV3WS_URL (ou CCWS_URL legado)');
+    process.exit(1);
+}
+assertEnv(['MQTT_HOST', 'USER_DATA_PATH']);
 
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
