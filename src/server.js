@@ -22,12 +22,13 @@ const _PORT = process.env.PORT || 8080;
 // start core component
 const core = require('./core');
 
-// import modules routes
-const mod_disp = require('./modules/disp-lyr');
-const mod_prfchs = require('./modules/prf-chs');
-const mod_prfmngr = require('./modules/prf-mngr');
-const mod_appcat = require('./modules/app-cat');
-const mod_btpapp = require('./modules/btp-app');
+// import modules routes — nomes alinhados aos identificadores da norma
+// (R2); os CAMINHOS DE URL vem da tabela core.GUI e não mudam aqui.
+const mod_disp = require('./modules/graphic-overlays');
+const mod_prfchs = require('./modules/profile-manager/chooser');
+const mod_prfmngr = require('./modules/profile-manager/manager');
+const mod_appcat = require('./modules/application-catalog');
+const mod_btpapp = require('./modules/bootstrap-application');
 
 // middleware configuration
 const app = express();

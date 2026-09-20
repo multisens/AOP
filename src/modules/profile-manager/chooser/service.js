@@ -1,5 +1,5 @@
 require('dotenv').config();
-const core = require('../../core');
+const core = require('../../../core');
 
 // Default avatar (verde) quando user nao customizou.
 // SVG inline com silhueta classica de pessoa (mesma forma dos PNGs legados,

@@ -1,4 +1,4 @@
-const core = require('../../core');
+const core = require('../../../core');
 const ejs = require('ejs');
 const express = require('express');
 const path = require('path');
