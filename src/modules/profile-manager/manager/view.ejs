@@ -584,26 +584,12 @@
 
         // === SISTEMA DE SELECAO DE AVATARES (SVG inline com paleta) ===
 
-        const AVATAR_COLORS = [
-            { hex: '#4d7c5b', name: 'Verde' },
-            { hex: '#4d5b7c', name: 'Azul' },
-            { hex: '#7c4d4d', name: 'Vermelho' },
-            { hex: '#7c704d', name: 'Mostarda' },
-            { hex: '#5b4d7c', name: 'Roxo' },
-            { hex: '#4d7c70', name: 'Verde-azulado' },
-            { hex: '#7c4d6e', name: 'Rosa' },
-            { hex: '#7c6e4d', name: 'Marrom' }
-        ];
+        // Paleta e avatar padrao vem do modulo unico do gestor de perfis
+        // (avatar.js) — a silhueta nao mora mais copiada nesta view (M1).
+        const AVATAR_COLORS = <%- JSON.stringify(avatarColors) %>;
+        const DEFAULT_AVATAR_SVG = <%- JSON.stringify(defaultAvatar) %>;
 
-        function svgAvatar(hex) {
-            return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
-                '<rect width="100" height="100" rx="30" fill="' + hex + '"/>' +
-                '<circle cx="50" cy="40" r="14" fill="none" stroke="#ffffff" stroke-width="5"/>' +
-                '<path d="M 14 90 a 36 36 0 0 1 72 0" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>' +
-            '</svg>';
-        }
-
-        let selectedAvatar = svgAvatar('#4d7c5b'); // SVG default (verde)
+        let selectedAvatar = DEFAULT_AVATAR_SVG;
         let tempSelectedAvatar = null;
 
         function renderSelectedAvatarPreview() {
@@ -627,8 +613,7 @@
             const grid = document.getElementById('avatar-grid');
             grid.innerHTML = '';
 
-            AVATAR_COLORS.forEach(({ hex, name }) => {
-                const svg = svgAvatar(hex);
+            AVATAR_COLORS.forEach(({ svg, name }) => {
                 const div = document.createElement('div');
                 div.className = 'avatar-option';
                 div.dataset.svg = svg;
@@ -717,9 +702,10 @@
                 voiceGuidance
             };
 
-            // Enviar pro CCWS direto via KrakenD interno (Redis source-of-truth)
-            const CCWS = 'http://' + window.location.hostname + ':44642';
-            fetch(CCWS + '/tv3/users', {
+            // Criacao de perfil e funcao do gestor de perfis da PLATAFORMA
+            // (P3): POST na propria origem, escrita direta no armazenamento.
+            // A antiga rota fora-da-spec POST /tv3/users do tv3ws saiu.
+            fetch('/profile/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newProfile)
@@ -729,7 +715,12 @@
                 if (!response.ok) {
                     throw new Error(data.error || data.description || ('HTTP ' + response.status));
                 }
-                alert('Perfil criado com sucesso!');
+                if (data.evicted) {
+                    alert('Perfil criado! Como o limite de 5 perfis foi atingido, o perfil "'
+                        + data.evicted.nickname + '" (o de acesso mais antigo) foi removido.');
+                } else {
+                    alert('Perfil criado com sucesso!');
+                }
                 window.location.href = '/prfchs';
             })
             .catch(error => {
@@ -747,7 +738,7 @@
             document.getElementById('closedCaptioningLanguage').style.display = 'none';
             document.getElementById('width-value').textContent = '28%';
             document.getElementById('maxContentRating').value = '';
-            selectedAvatar = svgAvatar('#4d7c5b');
+            selectedAvatar = DEFAULT_AVATAR_SVG;
             renderSelectedAvatarPreview();
             focusStop(0);
         }
