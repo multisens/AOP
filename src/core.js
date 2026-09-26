@@ -1,6 +1,37 @@
 require('dotenv').config();
 const fs = require('fs');
 const mqtt = require('mqtt');
+const redis = require('./redis-client');
+
+// Lista de origens de aplicacoes associadas (P1): escrita direta pela
+// plataforma, limpa no boot para que parada anormal nao deixe entrada orfa.
+// Enquanto a aplicacao de emissora for servida por proxy na origem da
+// propria plataforma, o Origin do navegador nao a discrimina — o registro
+// abaixo guarda a origem PROPRIA da aplicacao (alvo do proxy), que passa a
+// valer quando cada aplicacao for servida sob origem propria (pre-requisito
+// registrado na vacina, IV.2/P1 item 3).
+const ORIGINS_KEY = 'origins:associated';
+redis.del(ORIGINS_KEY).catch(err => console.error(`[origins] falha limpando ${ORIGINS_KEY}: ${err.message}`));
+
+function registerAssociatedOrigin(appUrl) {
+    try {
+        const origin = new URL(appUrl).origin;
+        const scid = DATA.currentService || 'current-service';
+        redis.hset(ORIGINS_KEY, origin, scid)
+            .catch(err => console.error(`[origins] falha registrando ${origin}: ${err.message}`));
+        return origin;
+    } catch {
+        return null;
+    }
+}
+
+function unregisterAssociatedOrigin(appUrl) {
+    try {
+        const origin = new URL(appUrl).origin;
+        redis.hdel(ORIGINS_KEY, origin)
+            .catch(err => console.error(`[origins] falha removendo ${origin}: ${err.message}`));
+    } catch { /* URL invalida: nada registrado */ }
+}
 
 const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {
     clientId : 'aop-core',
@@ -96,6 +127,14 @@ function setDisplayGui(screen) {
 }
 
 function setDisplayGraphics(baseUrl = '', epUrl = '') {
+    // registro/remocao no lancamento e encerramento da aplicacao (P1)
+    if (DATA.graphicsAppURL && DATA.graphicsAppURL !== baseUrl) {
+        unregisterAssociatedOrigin(DATA.graphicsAppURL);
+    }
+    if (baseUrl !== '') {
+        registerAssociatedOrigin(baseUrl);
+    }
+
     DATA.graphicsAppURL = baseUrl;
     client.publish(_t.graphics_layer, baseUrl != '' ? `/graphicsAppProxy${epUrl}` : baseUrl);
 }
@@ -121,24 +160,18 @@ function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
 }
 
 async function loadUserData(attempt = 1) {
-    // Source-of-truth: Redis (via CCWS). userData.json eh apenas seed inicial
-    // que o CCWS popula no Redis em initFromRedis quando users:index esta vazio.
-    const ccwsBase =  (process.env.TV3WS_URL || process.env.CCWS_URL) || 'http://tv3ws:44652';
+    // A plataforma le os perfis DIRETO do armazenamento (P1 item 8): o
+    // antigo caminho HTTP pela porta do tv3ws entrava sem credencial
+    // validada e era o que mantinha a porta do servico alcancavel por fora
+    // do gateway (defeito 6). A restricao de divulgacao de C.6.14.1 e para
+    // clientes na fronteira da API — o gestor de perfis da plataforma ve
+    // todos os perfis por definicao.
     try {
-        const listRes = await fetch(`${ccwsBase}/tv3/current-service/users`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ and: [] })
-        });
-        if (!listRes.ok) throw new Error(`CCWS list HTTP ${listRes.status}`);
-        const list = await listRes.json();
-        const ids = (list.users || []).map(u => u.id).filter(Boolean);
+        const ids = await redis.smembers('users:index');
 
         const details = await Promise.all(ids.map(async id => {
             try {
-                const r = await fetch(`${ccwsBase}/tv3/current-service/users/${encodeURIComponent(id)}`);
-                if (!r.ok) return { id, name: id, avatar: null };
-                const d = await r.json();
+                const d = await redis.hgetall(`user:${id}`);
                 return { id, name: d.nickname || d.name || id, avatar: d.avatar || null };
             } catch {
                 return { id, name: id, avatar: null };
@@ -151,15 +184,15 @@ async function loadUserData(attempt = 1) {
         if (DATA.users.length > 0 && !DATA.currentUser) {
             setCurrentUser(DATA.users[0].id);
         }
-        console.log(`Loaded ${DATA.users.length} users from CCWS`);
+        console.log(`Loaded ${DATA.users.length} users from Redis`);
     } catch (err) {
-        // CCWS pode demorar pra subir. Retry ate 5x com backoff.
+        // Redis pode demorar pra subir. Retry ate 5x com backoff.
         if (attempt < 5) {
             const delay = attempt * 2000;
-            console.log(`Falha carregando users do CCWS (tentativa ${attempt}/${5}, retry em ${delay}ms): ${err.message}`);
+            console.log(`Falha carregando users do Redis (tentativa ${attempt}/${5}, retry em ${delay}ms): ${err.message}`);
             setTimeout(() => loadUserData(attempt + 1), delay);
         } else {
-            console.error(`Desistindo de carregar users do CCWS apos ${attempt} tentativas: ${err.message}`);
+            console.error(`Desistindo de carregar users do Redis apos ${attempt} tentativas: ${err.message}`);
         }
     }
 }
