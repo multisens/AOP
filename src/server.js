@@ -12,12 +12,9 @@ function assertEnv(required) {
         process.exit(1);
     }
 }
-// TV3WS_URL (novo nome, R1) com fallback pro legado CCWS_URL
-if (!process.env.TV3WS_URL && !process.env.CCWS_URL) {
-    console.error('[boot] faltando TV3WS_URL (ou CCWS_URL legado)');
-    process.exit(1);
-}
-assertEnv(['MQTT_HOST', 'USER_DATA_PATH']);
+// A plataforma le perfis e escreve a lista de origens direto no Redis
+// (P1) — o antigo TV3WS_URL/CCWS_URL nao e mais usado.
+assertEnv(['MQTT_HOST', 'USER_DATA_PATH', 'REDIS_HOST']);
 
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');

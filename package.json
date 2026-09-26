@@ -17,6 +17,7 @@
     "dotenv": "^16.5.0",
     "ejs": "^3.1.10",
     "express": "^5.1.0",
+    "ioredis": "^6.0.0",
     "mqtt": "^5.13.0"
   },
   "devDependencies": {
