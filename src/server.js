@@ -77,6 +77,11 @@ const proxyGraphics = createProxyMiddleware({
 });
 app.use('/graphicsAppProxy', proxyGraphics);
 
+// B.6.3: o proxy respeita os metadados de cache da origem (ETag,
+// Last-Modified, Expires). A politica antiga — apagar esses cabecalhos e
+// forcar no-store nas playlists — era o CONTRARIO do que a norma exige
+// (item 25 da vacina). Playlists de transmissao ao vivo devem declarar a
+// propria validade na ORIGEM (simulador), nao ser des-cacheadas no proxy.
 const proxyStream = createProxyMiddleware({
     target: '',
     changeOrigin: true,
@@ -87,21 +92,6 @@ const proxyStream = createProxyMiddleware({
         '^/videoStreamProxy': ''
     },
     on: {
-        proxyReq: (proxyReq, req, res) => {
-            if (req.path.endsWith('.m3u8')) {
-                proxyReq.setHeader('Cache-Control', 'no-cache');
-                proxyReq.setHeader('Pragma', 'no-cache');
-            }
-        },
-        proxyRes: (proxyRes, req, res) => {
-            if (req.path.endsWith('.m3u8')) {
-                proxyRes.headers['cache-control'] = 'no-store, no-cache, must-revalidate';
-                proxyRes.headers['pragma'] = 'no-cache';
-                delete proxyRes.headers['expires'];
-                delete proxyRes.headers['etag'];
-                delete proxyRes.headers['last-modified'];
-            }
-        },
         error: (err, req, res) => {
             console.error('VideoStreamProxy Error:', err);
             res.status(500).send('VideoStreamProxy Error');
