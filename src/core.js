@@ -4,38 +4,33 @@ const mqtt = require('mqtt');
 const redis = require('./redis-client');
 const { whenReady } = require('./redis-options');
 const profiles = require('./modules/profile-manager/service');
+const appHosts = require('./app-hosts');
+
+// P1.3 (decisao do Luis em 10/10): cada aplicacao de emissora abre na sua
+// propria origem, http://<rotulo>.<APPS_DOMAIN>:<AOP_PUBLIC_PORT> (ver
+// ./app-hosts.js). Configuracao lida uma vez; o server.js ja a validou no
+// boot.
+const APPS = appHosts.appsConfig();
 
 // Lista de origens de aplicacoes associadas (P1): escrita direta pela
 // plataforma, limpa no boot para que parada anormal nao deixe entrada orfa.
-// Enquanto a aplicacao de emissora for servida por proxy na origem da
-// propria plataforma, o Origin do navegador nao a discrimina — o registro
-// abaixo guarda a origem PROPRIA da aplicacao (alvo do proxy), que passa a
-// valer quando cada aplicacao for servida sob origem propria (pre-requisito
-// registrado na vacina, IV.2/P1 item 3).
+// Desde o P1.3, o registro guarda a origem PROPRIA da aplicacao — a mesma
+// que o navegador manda no Origin das chamadas dela, porque a camada grafica
+// a abre nesse host (antes: o alvo do proxy, http://bcast:8081, que nenhum
+// navegador mandava, e as aplicacoes nao eram reconhecidas como associadas).
+// O valor e o id do servico corrente (o mesmo de antes).
 // D-0510-6 (reuniao 05/10 com o Joel): registro e remocao devolvem a
 // promessa (antes: .catch que so logava); quem chama de rota HTTP espera e a
 // falha vira 404 {error:200}; quem chama de handler MQTT loga.
 const ORIGINS_KEY = 'origins:associated';
 whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => redis.del(ORIGINS_KEY));
 
-function registerAssociatedOrigin(appUrl) {
-    let origin;
-    try {
-        origin = new URL(appUrl).origin;
-    } catch {
-        return Promise.resolve(null);   // URL invalida: nada a registrar
-    }
+function registerAssociatedOrigin(origin) {
     const scid = DATA.currentService || 'current-service';
     return redis.hset(ORIGINS_KEY, origin, scid).then(() => origin);
 }
 
-function unregisterAssociatedOrigin(appUrl) {
-    let origin;
-    try {
-        origin = new URL(appUrl).origin;
-    } catch {
-        return Promise.resolve();   // URL invalida: nada registrado
-    }
+function unregisterAssociatedOrigin(origin) {
     return redis.hdel(ORIGINS_KEY, origin).then(() => undefined);
 }
 
@@ -50,7 +45,8 @@ const DATA = {
         current: '',
         previous: ''
     },
-    graphicsAppURL: '',
+    // aplicacao na camada grafica: { appId, label, origin, target } ou null
+    graphicsApp: null,
     videoStreamURL: '',
     currentUser: '',
     users: [],
@@ -137,18 +133,28 @@ function setDisplayGui(screen) {
 
 // A camada grafica e publicada na hora, como antes; a promessa devolvida e a
 // do registro/remocao da origem no armazenamento (D-0510-6).
-function setDisplayGraphics(baseUrl = '', epUrl = '') {
-    // registro/remocao no lancamento e encerramento da aplicacao (P1)
-    const pending = [];
-    if (DATA.graphicsAppURL && DATA.graphicsAppURL !== baseUrl) {
-        pending.push(unregisterAssociatedOrigin(DATA.graphicsAppURL));
-    }
+// baseUrl = bcastEntryPackageUrl (alvo do proxy), epUrl = bcastEntryPointUrl
+// e appId = appId da entrada da BALD (rotulo do host; sem ele, o id do
+// servico corrente). Sem baseUrl, encerra a aplicacao.
+function setDisplayGraphics(baseUrl = '', epUrl = '', appId = '') {
+    let next = null;
     if (baseUrl !== '') {
-        pending.push(registerAssociatedOrigin(baseUrl));
+        next = appHosts.describeApp(appId || DATA.currentService, baseUrl, APPS);
+        if (!next) console.error(`[apps] bcastEntryPackageUrl invalido, aplicacao nao aberta: '${baseUrl}'`);
     }
 
-    DATA.graphicsAppURL = baseUrl;
-    client.publish(_t.graphics_layer, baseUrl != '' ? `/graphicsAppProxy${epUrl}` : baseUrl);
+    // registro/remocao no lancamento e encerramento da aplicacao (P1, P1.3)
+    const pending = [];
+    const prev = DATA.graphicsApp;
+    if (prev && (!next || prev.origin !== next.origin)) {
+        pending.push(unregisterAssociatedOrigin(prev.origin));
+    }
+    if (next) {
+        pending.push(registerAssociatedOrigin(next.origin));
+    }
+
+    DATA.graphicsApp = next;
+    client.publish(_t.graphics_layer, next ? appHosts.entryUrl(next.origin, epUrl) : '');
     return Promise.all(pending).then(() => undefined);
 }
 
@@ -338,8 +344,16 @@ function setBALDHandler(handler) {
     DATA.serviceMetadata.baldHandler = handler;
 }
 
+// Alvo do proxy da aplicacao em execucao ('' sem aplicacao); usado pelo
+// caminho antigo /graphicsAppProxy.
 function getGraphicsAppURL() {
-    return DATA.graphicsAppURL;
+    return DATA.graphicsApp ? DATA.graphicsApp.target : '';
+}
+
+// Aplicacao em execucao com este rotulo de host, ou null (roteamento por Host
+// do server.js; P1.3).
+function getGraphicsAppByLabel(label) {
+    return DATA.graphicsApp && DATA.graphicsApp.label === label ? DATA.graphicsApp : null;
 }
 
 function getVideoStreamURL() {
@@ -355,7 +369,7 @@ function openServiceInfo() {
     if (DATA.rxgui.current == '') {
         setDisplayGui(`${GUI.bootstrap_app}?mode=info`);
     }
-    if (DATA.graphicsAppURL != '') {
+    if (DATA.graphicsApp) {
         return setDisplayGraphics();
     }
     return Promise.resolve();
@@ -379,6 +393,7 @@ module.exports = {
     getServiceSLS,
     setBALDHandler,
     getGraphicsAppURL,
+    getGraphicsAppByLabel,
     getVideoStreamURL,
     openServiceInfo,
     loadUserData,
