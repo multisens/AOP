@@ -19,14 +19,16 @@ router.get('/ready', (req, res) => {
     res.status(200).send();
 });
 
-router.get('/keydown/:keyCode', (req, res) => {
+router.get('/keydown/:keyCode', async (req, res) => {
     if (!req.params.keyCode) {
         res.status(400).send();
         return;
     }
 
     if (['27', '93'].includes(req.params.keyCode)) {
-        core.openServiceInfo();
+        // espera a remocao da origem associada; falha do Redis -> 404
+        // {error:200} (D-0510-6)
+        await core.openServiceInfo();
     }
     else if (req.params.keyCode == '33') {
         console.log('channel +');

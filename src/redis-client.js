@@ -5,14 +5,11 @@ const Redis = require('ioredis');
 // perfis deixou de passar pela porta HTTP do tv3ws (caminho sem credencial
 // validada, defeito 6 da vacina), e a lista de origens de aplicacoes
 // associadas (origins:associated) e escrita por aqui.
-const redis = new Redis({
-    host: process.env.REDIS_HOST || 'redis',
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
-    lazyConnect: false,
-    maxRetriesPerRequest: null,
-});
+// Opcoes de falha rapida e log de conexao: ./redis-options.js (D-0510-6).
+const { redisOptions, logRedisEvents } = require('./redis-options');
 
-redis.on('connect', () => console.log('[Redis] Connected'));
-redis.on('error', (err) => console.error('[Redis] Error:', err.message));
+const options = redisOptions();
+const redis = new Redis(options);
+logRedisEvents(redis, `${options.host}:${options.port}`);
 
 module.exports = redis;

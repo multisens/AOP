@@ -2,6 +2,8 @@ require('dotenv').config();
 const fs = require('fs');
 const mqtt = require('mqtt');
 const redis = require('./redis-client');
+const { whenReady } = require('./redis-options');
+const profiles = require('./modules/profile-manager/service');
 
 // Lista de origens de aplicacoes associadas (P1): escrita direta pela
 // plataforma, limpa no boot para que parada anormal nao deixe entrada orfa.
@@ -10,27 +12,31 @@ const redis = require('./redis-client');
 // abaixo guarda a origem PROPRIA da aplicacao (alvo do proxy), que passa a
 // valer quando cada aplicacao for servida sob origem propria (pre-requisito
 // registrado na vacina, IV.2/P1 item 3).
+// D-0510-6 (reuniao 05/10 com o Joel): registro e remocao devolvem a
+// promessa (antes: .catch que so logava); quem chama de rota HTTP espera e a
+// falha vira 404 {error:200}; quem chama de handler MQTT loga.
 const ORIGINS_KEY = 'origins:associated';
-redis.del(ORIGINS_KEY).catch(err => console.error(`[origins] falha limpando ${ORIGINS_KEY}: ${err.message}`));
+whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => redis.del(ORIGINS_KEY));
 
 function registerAssociatedOrigin(appUrl) {
+    let origin;
     try {
-        const origin = new URL(appUrl).origin;
-        const scid = DATA.currentService || 'current-service';
-        redis.hset(ORIGINS_KEY, origin, scid)
-            .catch(err => console.error(`[origins] falha registrando ${origin}: ${err.message}`));
-        return origin;
+        origin = new URL(appUrl).origin;
     } catch {
-        return null;
+        return Promise.resolve(null);   // URL invalida: nada a registrar
     }
+    const scid = DATA.currentService || 'current-service';
+    return redis.hset(ORIGINS_KEY, origin, scid).then(() => origin);
 }
 
 function unregisterAssociatedOrigin(appUrl) {
+    let origin;
     try {
-        const origin = new URL(appUrl).origin;
-        redis.hdel(ORIGINS_KEY, origin)
-            .catch(err => console.error(`[origins] falha removendo ${origin}: ${err.message}`));
-    } catch { /* URL invalida: nada registrado */ }
+        origin = new URL(appUrl).origin;
+    } catch {
+        return Promise.resolve();   // URL invalida: nada registrado
+    }
+    return redis.hdel(ORIGINS_KEY, origin).then(() => undefined);
 }
 
 const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {
@@ -126,17 +132,21 @@ function setDisplayGui(screen) {
     DATA.rxgui.current = screen;
 }
 
+// A camada grafica e publicada na hora, como antes; a promessa devolvida e a
+// do registro/remocao da origem no armazenamento (D-0510-6).
 function setDisplayGraphics(baseUrl = '', epUrl = '') {
     // registro/remocao no lancamento e encerramento da aplicacao (P1)
+    const pending = [];
     if (DATA.graphicsAppURL && DATA.graphicsAppURL !== baseUrl) {
-        unregisterAssociatedOrigin(DATA.graphicsAppURL);
+        pending.push(unregisterAssociatedOrigin(DATA.graphicsAppURL));
     }
     if (baseUrl !== '') {
-        registerAssociatedOrigin(baseUrl);
+        pending.push(registerAssociatedOrigin(baseUrl));
     }
 
     DATA.graphicsAppURL = baseUrl;
     client.publish(_t.graphics_layer, baseUrl != '' ? `/graphicsAppProxy${epUrl}` : baseUrl);
+    return Promise.all(pending).then(() => undefined);
 }
 
 function setVideoURL(url = '') {
@@ -159,32 +169,36 @@ function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
     }));
 }
 
+// A plataforma le os perfis DIRETO do armazenamento (P1 item 8): o
+// antigo caminho HTTP pela porta do tv3ws entrava sem credencial
+// validada e era o que mantinha a porta do servico alcancavel por fora
+// do gateway (defeito 6). A restricao de divulgacao de C.6.14.1 e para
+// clientes na fronteira da API — o gestor de perfis da plataforma ve
+// todos os perfis por definicao.
+// D-0510-6: falha do Redis REJEITA (antes, falha num perfil virava cartao
+// com o id e a da lista inteira so ia para o log, e a tela do chooser saia
+// com a lista velha). Rotas HTTP usam esta funcao e respondem 404 {error:200}.
+async function refreshUserData() {
+    const ids = await redis.smembers('users:index');
+
+    const details = await Promise.all(ids.map(async id => {
+        const d = await redis.hgetall(`user:${id}`);
+        return { id, name: d.nickname || d.name || id, avatar: d.avatar || null };
+    }));
+
+    DATA.users.length = 0;
+    details.forEach(u => DATA.users.push(u));
+
+    if (DATA.users.length > 0 && !DATA.currentUser) {
+        await setCurrentUser(DATA.users[0].id);
+    }
+    console.log(`Loaded ${DATA.users.length} users from Redis`);
+}
+
+// Caminho do boot/MQTT (sem rota para responder): tenta de novo e loga.
 async function loadUserData(attempt = 1) {
-    // A plataforma le os perfis DIRETO do armazenamento (P1 item 8): o
-    // antigo caminho HTTP pela porta do tv3ws entrava sem credencial
-    // validada e era o que mantinha a porta do servico alcancavel por fora
-    // do gateway (defeito 6). A restricao de divulgacao de C.6.14.1 e para
-    // clientes na fronteira da API — o gestor de perfis da plataforma ve
-    // todos os perfis por definicao.
     try {
-        const ids = await redis.smembers('users:index');
-
-        const details = await Promise.all(ids.map(async id => {
-            try {
-                const d = await redis.hgetall(`user:${id}`);
-                return { id, name: d.nickname || d.name || id, avatar: d.avatar || null };
-            } catch {
-                return { id, name: id, avatar: null };
-            }
-        }));
-
-        DATA.users.length = 0;
-        details.forEach(u => DATA.users.push(u));
-
-        if (DATA.users.length > 0 && !DATA.currentUser) {
-            setCurrentUser(DATA.users[0].id);
-        }
-        console.log(`Loaded ${DATA.users.length} users from Redis`);
+        await refreshUserData();
     } catch (err) {
         // Redis pode demorar pra subir. Retry ate 5x com backoff.
         if (attempt < 5) {
@@ -197,11 +211,24 @@ async function loadUserData(attempt = 1) {
     }
 }
 
+// D-0510-5 (reuniao 05/10 com o Joel): a plataforma, dona dos perfis, grava
+// o lastAccess (despejo P3) em toda troca de usuario corrente — a feita aqui
+// (setCurrentUser) e a que chega por aop/currentUser vinda de outro
+// componente (C.6.14.4 no tv3ws). O eco da propria publicacao chega com o
+// mesmo valor e e ignorado. O retido recebido no boot conta como acesso, como
+// fazia o tv3ws.
 function loadCurrentUser(message) {
-    DATA.currentUser = message.toString();
+    const uid = message.toString();
+    if (uid === DATA.currentUser) return;
+    DATA.currentUser = uid;
+    profiles.touchLastAccess(uid)
+        .catch(err => console.error(`[profiles] falha gravando lastAccess de ${uid}: ${err.message}`));
 }
 
-function setCurrentUser(uid) {
+// Grava o lastAccess ANTES de trocar: se o armazenamento falhar, a troca nao
+// acontece e quem chamou recebe o erro (rota: 404 {error:200}).
+async function setCurrentUser(uid) {
+    await profiles.touchLastAccess(uid.toString());
     DATA.currentUser = uid.toString();
     client.publish(_t.current_user, uid.toString(), { retain : true });
 }
@@ -316,20 +343,19 @@ function getVideoStreamURL() {
     return DATA.videoStreamURL;
 }
 
-// Publica em aop/users com o path do diretorio de userData. CCWS sincroniza
-// pro Redis e AoP recarrega DATA.users. Chamado quando algo cria/edita
-// userData.json (ex: mod_prfmngr.createUser).
-function notifyUsersChanged() {
-    client.publish('aop/users', process.env.USER_DATA_PATH || '/user-files', { qos: 1 });
-}
+// (notifyUsersChanged saiu: publicava aop/users para o tv3ws sincronizar o
+// userData.json no Redis, o que o tv3ws nao faz mais — D-0510-5. Nao tinha
+// chamador.)
 
+// Devolve a promessa da remocao da origem associada (D-0510-6).
 function openServiceInfo() {
     if (DATA.rxgui.current == '') {
         setDisplayGui(`${GUI.bootstrap_app}?mode=info`);
     }
     if (DATA.graphicsAppURL != '') {
-        setDisplayGraphics();
+        return setDisplayGraphics();
     }
+    return Promise.resolve();
 }
 
 
@@ -352,6 +378,6 @@ module.exports = {
     getGraphicsAppURL,
     getVideoStreamURL,
     openServiceInfo,
-    notifyUsersChanged,
-    loadUserData
+    loadUserData,
+    refreshUserData
 }

@@ -18,14 +18,22 @@ router.get('/create', async (req, res) => {
     res.send(html);
 });
 
+// D-0510-6: so o erro de validacao responde 400 {error: mensagem} (contrato
+// da view); falha do armazenamento sobe e vira 404 {error:200}
+// (platformErrorHandler) — antes tambem saia como 400 de dado invalido.
 router.post('/create', async (req, res) => {
+    let result;
     try {
-        const result = await service.createProfile(req.body || {});
-        await core.loadUserData();
-        res.status(201).json(result);
+        result = await service.createProfile(req.body || {});
     } catch (err) {
-        res.status(400).json({ error: err.message });
+        if (err instanceof service.ValidationError) {
+            res.status(400).json({ error: err.message });
+            return;
+        }
+        throw err;
     }
+    await core.refreshUserData();
+    res.status(201).json(result);
 });
 
 module.exports = router;
