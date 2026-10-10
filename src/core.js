@@ -77,11 +77,14 @@ const _t = {
     graphics_layer: 'aop/display/layers/graphics'
 };
 
+// (a assinatura de aop/users saiu em 10/10: ninguem publica o topico — o
+// notifyUsersChanged, que o publicaria, ja tinha saido, sem chamador — e o
+// tv3ws deixou de sincronizar perfis em 05/10, D-0510-5. A carga da lista de
+// perfis segue no connect, abaixo.)
 const _topics = new Map([
     [_t.current_user, loadCurrentUser],
     [_t.current_service, loadCurrentService],
-    [_t.lls_metadata, loadLLSMetadata],
-    ['aop/users', () => loadUserData()]
+    [_t.lls_metadata, loadLLSMetadata]
 ]);
 
 client.on('connect', () => {
