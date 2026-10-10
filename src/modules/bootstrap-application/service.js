@@ -86,7 +86,8 @@ function startApp(bald) {
 		if (!entryPackage.controlCode || entryPackage.controlCode == 'AUTOSTART'){
 			if (entryPackage.appType == 'TV30-Ginga-HTML5') {
 				// just load it in the graphics layer
-				pending.push(core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl, entryPackage.bcastEntryPointUrl));
+				// (P1.3: na origem propria da aplicacao; o rotulo do host sai do appId)
+				pending.push(core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl, entryPackage.bcastEntryPointUrl, entryPackage.appId));
 			}
 			else if (entryPackage.appType == 'TV30-Ginga-NCL') {
 				// todo: use ncl component

@@ -169,7 +169,7 @@
                     player.play();
 
                     player.on('timeupdate', (p) => {
-                        $('#graphics').contents()[0].dispatchEvent(new CustomEvent('timeupdate', { detail: player.currentTime() }));
+                        graphics_event('timeupdate', { detail: player.currentTime() });
                     });
 
                     player.on('error', () => {
@@ -219,7 +219,7 @@
 
             function mqtt_message(client, topic, message) {
                 if (topic == 'video/event') {
-                    $('#graphics').contents()[0].dispatchEvent(new CustomEvent('stream_event', { detail: message }));
+                    graphics_event('stream_event', { detail: message.toString() });
                 }
 
                 let t = topic.replace('aop/display/layers/', '');
@@ -254,8 +254,33 @@
                     $('#rxgui').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
                 }
                 else if ($('#graphics').attr('src') != '') {
-                    $('#graphics').contents()[0].dispatchEvent(new KeyboardEvent('keydown', {key: e.key}));
+                    graphics_event('keydown', { key: e.key });
                 }
+            }
+
+            // Eventos para a aplicacao de emissora da camada grafica. Desde o
+            // P1.3 (decisao do Luis em 10/10) ela abre na sua propria origem
+            // (http://<app>.<APPS_DOMAIN>:<porta do AoP>), e a politica de
+            // mesma origem impede disparar o evento direto no documento dela,
+            // como antes. Vai por postMessage, so para a origem da aplicacao,
+            // e a ponte do bcast (bcast/public/js/aop-bridge.js) o redespacha
+            // no document dela com o mesmo formato. Na mesma origem (caminho
+            // antigo /graphicsAppProxy), o disparo direto continua.
+            function graphics_event(name, init) {
+                const frame = document.getElementById('graphics');
+                if (!frame.getAttribute('src') || !frame.contentWindow) return;
+                let doc = null;
+                try { doc = frame.contentDocument; } catch (_) { doc = null; }
+                if (doc) {
+                    // documento inicial (about:blank) enquanto carrega: nada a avisar
+                    if (doc.location.href == 'about:blank') return;
+                    doc.dispatchEvent(name == 'keydown'
+                        ? new KeyboardEvent('keydown', { key: init.key })
+                        : new CustomEvent(name, { detail: init.detail }));
+                    return;
+                }
+                const target = new URL(frame.src, window.location.href).origin;
+                frame.contentWindow.postMessage(Object.assign({ type: 'tv30-aop-event', event: name }, init), target);
             }
         </script>
     </head>

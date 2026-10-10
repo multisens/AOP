@@ -16,6 +16,18 @@ function assertEnv(required) {
 // (P1) — o antigo TV3WS_URL/CCWS_URL nao e mais usado.
 assertEnv(['MQTT_HOST', 'USER_DATA_PATH', 'REDIS_HOST']);
 
+// P1.3: dominio das aplicacoes (APPS_DOMAIN, padrao apps.localhost) e porta
+// publica do AoP (AOP_PUBLIC_PORT, padrao PORT ou 8080). Valor invalido
+// encerra o boot, como env obrigatoria ausente.
+const appHosts = require('./app-hosts');
+let APPS;
+try {
+    APPS = appHosts.appsConfig();
+} catch (err) {
+    console.error(`[boot] ${err.message}`);
+    process.exit(1);
+}
+
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
@@ -34,6 +46,14 @@ const mod_btpapp = require('./modules/bootstrap-application');
 
 // middleware configuration
 const app = express();
+
+// P1.3: host de aplicacao (<rotulo>.<APPS_DOMAIN>) vai ao proxy da aplicacao
+// em execucao com esse rotulo; rotulo sem aplicacao responde 404. Fica
+// ANTES de tudo: um host de aplicacao nunca serve as paginas nem os arquivos
+// do AoP, e o corpo da requisicao chega intacto ao alvo.
+app.use(appHosts.appHostProxy({ cfg: APPS, lookup: core.getGraphicsAppByLabel }));
+console.log(`[apps] aplicacoes de emissora em http://<app>.${APPS.domain}` + (APPS.port === 80 ? '' : `:${APPS.port}`));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended : false}));
 app.use(express.static('public'));
@@ -55,27 +75,11 @@ app.use(core.GUI.app_catalogue, mod_appcat);
 app.use(core.GUI.bootstrap_app, mod_btpapp);
 app.use('/', mod_disp);
 
-// proxy for graphics iframe
-const proxyGraphics = createProxyMiddleware({
-    target: '',
-    changeOrigin: true,
-    router: (req) => {
-        return core.getGraphicsAppURL();
-    },
-    pathRewrite: {
-        '^/graphicsAppProxy': ''
-    },
-    on: {
-        proxyReq: (proxyReq, req, res) => {
-            console.log(`Redirecting '${req.url}' to '${core.getGraphicsAppURL()}${proxyReq.path}'`);
-        },
-        error: (err, req, res) => {
-            console.error('GraphicsAppProxy Error:', err);
-            res.status(500).send('GraphicsAppProxy Error');
-        }
-    }
-});
-app.use('/graphicsAppProxy', proxyGraphics);
+// Caminho ANTIGO da aplicacao de emissora, na origem do AoP. A camada grafica
+// nao o usa desde o P1.3 (abre o host proprio da aplicacao); fica enquanto
+// houver quem use (scripts/test-dev-host.sh, curl direto) e NAO registra
+// origem associada. Ver ./app-hosts.js.
+app.use('/graphicsAppProxy', appHosts.legacyGraphicsProxy({ getTarget: core.getGraphicsAppURL }));
 
 // B.6.3: o proxy respeita os metadados de cache da origem (ETag,
 // Last-Modified, Expires). A politica antiga — apagar esses cabecalhos e
