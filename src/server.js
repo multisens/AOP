@@ -100,6 +100,9 @@ const proxyStream = createProxyMiddleware({
 });
 app.use('/videoStreamProxy', proxyStream);
 
+// excecao em rota (ex.: Redis fora do ar) -> 404 {error:200} (D-0510-6)
+app.use(require('./http-error').platformErrorHandler);
+
 app.listen(_PORT, () => {
     console.log(`AoP running on port: ${_PORT}`);
 });

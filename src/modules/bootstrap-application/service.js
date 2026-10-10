@@ -65,28 +65,35 @@ function closeBootstrapApp(gui) {
 	core.unsetCurrentService();
 }
 
+// Devolve a promessa do registro da origem associada (D-0510-6). Sem BALD
+// ainda, o inicio fica para o handler (MQTT), que loga a falha.
 function fullscreen() {
 	core.setDisplayGui('');
 	core.setVideoSize();
 	try {
-		startApp(core.getServiceSLS().bald);
+		return startApp(core.getServiceSLS().bald);
 	} catch (error) {
-		core.setBALDHandler(startApp);
+		core.setBALDHandler(bald => {
+			startApp(bald).catch(err => console.error(`[origins] falha registrando a origem da aplicacao: ${err.message}`));
+		});
+		return Promise.resolve();
 	}
 }
 
 function startApp(bald) {
+	const pending = [];
 	bald.forEach(entryPackage => {
 		if (!entryPackage.controlCode || entryPackage.controlCode == 'AUTOSTART'){
 			if (entryPackage.appType == 'TV30-Ginga-HTML5') {
 				// just load it in the graphics layer
-				core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl, entryPackage.bcastEntryPointUrl);
+				pending.push(core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl, entryPackage.bcastEntryPointUrl));
 			}
 			else if (entryPackage.appType == 'TV30-Ginga-NCL') {
 				// todo: use ncl component
 			}
 		}
 	});
+	return Promise.all(pending);
 }
 
 

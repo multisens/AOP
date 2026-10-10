@@ -713,7 +713,10 @@
             .then(async (response) => {
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    throw new Error(data.error || data.description || ('HTTP ' + response.status));
+                    // 400 traz {error: mensagem}; falha da plataforma traz
+                    // {error: 200, description} (formato C.3.2)
+                    const msg = typeof data.error === 'string' ? data.error : data.description;
+                    throw new Error(msg || ('HTTP ' + response.status));
                 }
                 if (data.evicted) {
                     alert('Perfil criado! Como o limite de 5 perfis foi atingido, o perfil "'
