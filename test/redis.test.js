@@ -21,22 +21,51 @@ const FAIL = 'redis indisponivel (duble de teste)';
 const store = new Map();
 let down = false;
 const setOf = k => (store.get(k) instanceof Set ? store.get(k) : new Set());
+// P4 (Luis, 10/10): o gestor de perfis grava pelas funcoes do Redis
+// (src/redis-funcoes.js -> call('FCALL', funcao, 0, ...)). O duble imita o
+// EFEITO das funcoes de perfil (sem conferir o esquema: isso e testado no
+// Redis real, infra/redis/test); fcalls guarda cada chamada e recusa faz a
+// funcao responder como a dado fora do esquema.
+const fcalls = [];
+let recusa = null;   // [funcao, mensagem]
 const fakeRedis = new Proxy({
-    async eval(script, n, k1, k2, member, now) {
-        if (!/SISMEMBER[\s\S]*HSET/.test(script)) throw new Error('eval: script nao suportado');
-        if (!setOf(k1).has(member)) return 0;
-        store.set(k2, { ...(store.get(k2) || {}), lastAccess: now });
-        return 1;
+    async call(cmd, nome, numkeys, ...args) {
+        if (cmd !== 'FCALL' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${numkeys}: nao suportado pelo duble`);
+        const a = args.map(String);
+        fcalls.push([nome, ...a]);
+        if (recusa && recusa[0] === nome) throw new Error(recusa[1]);
+        switch (nome) {
+            case 'tv30_perfil_ultimo_acesso': {
+                const [id, ms] = a;
+                if (!setOf('users:index').has(id)) return 0;
+                store.set(`user:${id}`, { ...(store.get(`user:${id}`) || {}), lastAccess: ms });
+                return 1;
+            }
+            case 'tv30_perfil_grava': {
+                const [id, n] = a;
+                const k = Number(n);
+                const h = {};
+                for (let i = 2 + k; i + 1 < a.length; i += 2) h[a[i]] = a[i + 1];
+                const idx = setOf('users:index'); idx.add(id); store.set('users:index', idx);
+                store.set(`user:${id}`, h);
+                if (k > 0) { const s = setOf(`user:${id}:consent`); a.slice(2, 2 + k).forEach(x => s.add(x)); store.set(`user:${id}:consent`, s); }
+                return 1;
+            }
+            case 'tv30_perfil_remove': {
+                const [id] = a;
+                let n = setOf('users:index').delete(id) ? 1 : 0;
+                for (const key of [...store.keys()]) {
+                    if (key === `user:${id}` || key === `user:${id}:consent` || key.startsWith(`user:${id}:broadcaster-attrs:`)) { store.delete(key); n++; }
+                }
+                return n;
+            }
+            default: throw new Error('ERR Function not found');
+        }
     },
     async scard(k) { return setOf(k).size; },
     async smembers(k) { return [...setOf(k)]; },
     async hgetall(k) { return { ...(store.get(k) || {}) }; },
     async get(k) { return typeof store.get(k) === 'string' ? store.get(k) : null; },
-    async sadd(k, ...ms) { const s = setOf(k); ms.forEach(m => s.add(m)); store.set(k, s); return ms.length; },
-    async srem(k, ...ms) { const s = setOf(k); ms.forEach(m => s.delete(m)); return ms.length; },
-    async del(...ks) { ks.forEach(k => store.delete(k)); return ks.length; },
-    async hset(k, fields) { store.set(k, { ...(store.get(k) || {}), ...fields }); return 1; },
-    async keys() { return []; },
 }, {
     get(target, prop) {
         const f = target[prop];
@@ -191,6 +220,83 @@ test('POST /profile/create: dado invalido 400; Redis fora 404 {error:200}; ok 20
         r = await post({ nickname: 'Novo' });
         assert.equal(r.status, 201);
         assert.equal(refreshed.length, before + 1);
+    });
+});
+
+// --- P4 (Luis, 10/10): escritas de perfil pelas funcoes do Redis ------------------
+test('createProfile: UMA chamada tv30_perfil_grava com a visibilidade do servico ativo e a Tabela 7 em texto', async () => {
+    store.clear();
+    fcalls.length = 0;
+    store.set('session:current-service-id', 'urn:tv30:service:users-test');
+    const { user } = await profiles.createProfile({ nickname: ' Novo ', closedSigning: true, accessConsent: ['urn:a'] });
+    assert.equal(fcalls.length, 1);
+    const [nome, id, n, ...resto] = fcalls[0];
+    assert.equal(nome, 'tv30_perfil_grava');
+    assert.equal(id, user.id);
+    assert.equal(n, '2');
+    assert.deepEqual(resto.slice(0, 2), ['urn:a', 'urn:tv30:service:users-test']);
+    const h = {};
+    for (let i = 2; i < resto.length; i += 2) h[resto[i]] = resto[i + 1];
+    assert.equal(h.id, user.id);
+    assert.equal(h.nickname, 'Novo');
+    assert.equal(h.closedSigning, 'true');
+    assert.equal(h.closedSigningSide, 'right');
+    assert.equal(h.closedSigningWidth, '28');
+    assert.equal(h.parentalControl, 'false');
+    assert.equal(h.maxContentRating, undefined, 'condicional falso fica fora do hash');
+    assert.match(h.lastAccess, /^[1-9]\d*$/);
+});
+
+test('despejo (P3): UMA chamada tv30_perfil_remove com o perfil de ultimo acesso mais antigo', async () => {
+    store.clear();
+    fcalls.length = 0;
+    const idx = new Set();
+    for (let i = 1; i <= 5; i++) {
+        idx.add(`user_${i}`);
+        store.set(`user:user_${i}`, { nickname: `P${i}`, lastAccess: String(1000 + i) });
+    }
+    store.set('user:user_3', { nickname: 'P3', lastAccess: '10' });
+    store.set('user:user_3:broadcaster-attrs:urn:s', { a: '1' });
+    store.set('users:index', idx);
+    const { evicted } = await profiles.createProfile({ nickname: 'Sexto' });
+    assert.equal(evicted.id, 'user_3');
+    assert.deepEqual(fcalls.map(c => c.slice(0, 2)), [['tv30_perfil_remove', 'user_3'], ['tv30_perfil_grava', fcalls[1][1]]]);
+    assert.equal(store.has('user:user_3:broadcaster-attrs:urn:s'), false);
+    assert.equal(setOf('users:index').size, 5);
+});
+
+test('POST /profile/create: idioma ou visibilidade fora do esquema 400 (antes de gravar); recusa da funcao 404 {error:200}', async () => {
+    store.clear();
+    await withApp(app => app.use('/profile', managerRouter), async base => {
+        const post = body => fetch(`${base}/profile/create`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        fcalls.length = 0;
+        for (const body of [
+            { nickname: 'X', audioLanguage: 'Português' },
+            { nickname: 'X', userInterfaceLanguage: 'pt_BR' },
+            { nickname: 'X', closedCaptioning: true, closedCaptioningLanguage: 'p' },
+            { nickname: 'X', accessConsent: [''] },
+            { nickname: 'X', accessConsent: 'urn:a' },
+            { nickname: 'X', accessConsent: ['x'.repeat(257)] },
+        ]) {
+            const r = await post(body);
+            assert.equal(r.status, 400, JSON.stringify(body));
+        }
+        assert.deepEqual(fcalls, [], 'nada chega a funcao');
+        // idioma de legenda com a legenda desligada nao e gravado: nao recusa
+        let r = await post({ nickname: 'X', closedCaptioning: false, closedCaptioningLanguage: 'qualquer coisa' });
+        assert.equal(r.status, 201);
+
+        const msg = 'TV30ESQUEMA tv30_perfil_grava: user:user_1 campo nickname: tem 21 caracteres, maximo 20';
+        recusa = ['tv30_perfil_grava', msg];
+        try {
+            r = await post({ nickname: 'Novo' });
+            assert.equal(r.status, 404);
+            const j = await r.json();
+            assert.equal(j.error, 200);
+            assert.ok(j.description.includes(msg), j.description);
+        } finally { recusa = null; }
     });
 });
 

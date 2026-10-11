@@ -152,6 +152,11 @@
                 client.subscribe('aop/display/layers/+', { noLocal : true });
                 client.subscribe('aop/display/layers/video/+', { noLocal : true });
                 client.subscribe('aop/display/layers/popup/+/message', { noLocal : true });
+                // QR code e PIN do pareamento do cliente nao local (C.4.3.2,
+                // C.4.3.3): o tv3ws publica em popup/qrcode e popup/pin, sem
+                // /message (tv3ws/src/core.ts); sem esta assinatura eles
+                // nunca chegavam a tela
+                client.subscribe('aop/display/layers/popup/+', { noLocal : true });
                 client.subscribe('video/event', { noLocal : true });
             }
 

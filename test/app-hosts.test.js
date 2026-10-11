@@ -27,31 +27,35 @@ const FAIL = 'redis indisponivel (duble de teste)';
 const store = new Map();
 let down = false;
 const hashOf = k => (store.get(k) instanceof Map ? store.get(k) : new Map());
-const writes = [];   // [comando, chave, ...] de cada escrita
+const writes = [];   // ['FCALL', funcao, ...args] de cada escrita
 const fakeRedis = {
     status: 'ready',
     once() {},
     on() {},
 };
+// P4 (Luis, 10/10): a plataforma grava pelas funcoes do Redis
+// (src/redis-funcoes.js -> call('FCALL', funcao, 0, ...)). O duble imita o
+// EFEITO das funcoes de origem (sem conferir o esquema: isso e testado no
+// Redis real, infra/redis/test); o lastAccess de perfil desconhecido da 0.
+const ORIGENS = 'origins:associated';
+let recusa = null;   // [funcao, mensagem]: a funcao responde como a dado fora do esquema
 for (const [name, fn] of Object.entries({
-    async hset(k, ...args) {
-        const h = hashOf(k);
-        if (args.length === 1 && typeof args[0] === 'object') Object.entries(args[0]).forEach(([f, v]) => h.set(f, String(v)));
-        else for (let i = 0; i < args.length; i += 2) h.set(String(args[i]), String(args[i + 1]));
-        store.set(k, h);
-        writes.push(['HSET', k, ...args]);
-        return 1;
+    async call(cmd, nome, numkeys, ...args) {
+        if (cmd !== 'FCALL' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${numkeys}: nao suportado pelo duble`);
+        const a = args.map(String);
+        if (recusa && recusa[0] === nome) throw new Error(recusa[1]);
+        writes.push(['FCALL', nome, ...a]);
+        const h = hashOf(ORIGENS);
+        switch (nome) {
+            case 'tv30_origens_limpa': return store.delete(ORIGENS) ? 1 : 0;
+            case 'tv30_origem_registra': h.set(a[0], a[1]); store.set(ORIGENS, h); return 1;
+            case 'tv30_origem_remove': return h.delete(a[0]) ? 1 : 0;
+            case 'tv30_perfil_ultimo_acesso': return 0;
+            default: throw new Error('ERR Function not found');
+        }
     },
-    async hdel(k, ...fs) {
-        const h = hashOf(k);
-        fs.forEach(f => h.delete(f));
-        writes.push(['HDEL', k, ...fs]);
-        return fs.length;
-    },
-    async del(...ks) { ks.forEach(k => store.delete(k)); writes.push(['DEL', ...ks]); return ks.length; },
     async smembers() { return []; },
     async hgetall(k) { return Object.fromEntries(hashOf(k)); },
-    async eval() { return 0; },
 })) {
     fakeRedis[name] = async (...args) => { if (down) throw new Error(FAIL); return fn(...args); };
 }
@@ -221,8 +225,29 @@ test('troca de aplicacao: remove a origem anterior e registra a nova; relancar a
 
     writes.length = 0;
     await core.setDisplayGraphics('http://bcast:8081', '/webmedia', 'urn:tv30:app:w9');
-    assert.deepEqual(writes.filter(w => w[0] === 'HDEL'), []);
+    assert.deepEqual(writes.filter(w => w[1] === 'tv30_origem_remove'), []);
     assert.deepEqual(origins(), { 'http://urn-tv30-app-w9.apps.localhost:8080': SID });
+});
+
+test('P4: registro e remocao da origem saem pelas funcoes do Redis (tv30_origem_*), na ordem remove-registra', async () => {
+    writes.length = 0;
+    await core.setDisplayGraphics('http://bcast:8081', '/x', 'urn:tv30:app:p4');
+    await core.setDisplayGraphics('http://bcast:8081', '/y', 'urn:tv30:app:p5');
+    assert.deepEqual(writes, [
+        ['FCALL', 'tv30_origem_remove', 'http://urn-tv30-app-w9.apps.localhost:8080'],
+        ['FCALL', 'tv30_origem_registra', 'http://urn-tv30-app-p4.apps.localhost:8080', SID],
+        ['FCALL', 'tv30_origem_remove', 'http://urn-tv30-app-p4.apps.localhost:8080'],
+        ['FCALL', 'tv30_origem_registra', 'http://urn-tv30-app-p5.apps.localhost:8080', SID],
+    ]);
+});
+
+test('P4: registro recusado pela funcao (esquema): o lancamento rejeita com a mensagem (rota HTTP: 404 {error:200})', async () => {
+    const msg = 'TV30ESQUEMA tv30_origem_registra: origins:associated nome de campo: host deve estar em minusculas';
+    recusa = ['tv30_origem_registra', msg];
+    try {
+        await assert.rejects(core.setDisplayGraphics('http://bcast:8081', '/x', 'urn:tv30:app:q'), { message: msg });
+    } finally { recusa = null; }
+    await core.setDisplayGraphics('http://bcast:8081', '/y', 'urn:tv30:app:p5');
 });
 
 test('sem appId: o rotulo sai do id do servico corrente', async () => {

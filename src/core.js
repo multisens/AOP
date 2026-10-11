@@ -2,6 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const mqtt = require('mqtt');
 const redis = require('./redis-client');
+const funcoes = require('./redis-funcoes');
 const { whenReady } = require('./redis-options');
 const profiles = require('./modules/profile-manager/service');
 const appHosts = require('./app-hosts');
@@ -12,8 +13,11 @@ const appHosts = require('./app-hosts');
 // boot.
 const APPS = appHosts.appsConfig();
 
-// Lista de origens de aplicacoes associadas (P1): escrita direta pela
-// plataforma, limpa no boot para que parada anormal nao deixe entrada orfa.
+// Lista de origens de aplicacoes associadas (P1): escrita pela plataforma,
+// limpa no boot para que parada anormal nao deixe entrada orfa. P4 (Luis,
+// 10/10): registro, remocao e limpeza passam pelas funcoes do Redis
+// (./redis-funcoes.js), que conferem o esquema da origem (como o navegador a
+// manda no Origin: esquema e host em minusculas, sem porta padrao).
 // Desde o P1.3, o registro guarda a origem PROPRIA da aplicacao — a mesma
 // que o navegador manda no Origin das chamadas dela, porque a camada grafica
 // a abre nesse host (antes: o alvo do proxy, http://bcast:8081, que nenhum
@@ -23,15 +27,15 @@ const APPS = appHosts.appsConfig();
 // promessa (antes: .catch que so logava); quem chama de rota HTTP espera e a
 // falha vira 404 {error:200}; quem chama de handler MQTT loga.
 const ORIGINS_KEY = 'origins:associated';
-whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => redis.del(ORIGINS_KEY));
+whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => funcoes.origensLimpa());
 
 function registerAssociatedOrigin(origin) {
     const scid = DATA.currentService || 'current-service';
-    return redis.hset(ORIGINS_KEY, origin, scid).then(() => origin);
+    return funcoes.origemRegistra(origin, scid).then(() => origin);
 }
 
 function unregisterAssociatedOrigin(origin) {
-    return redis.hdel(ORIGINS_KEY, origin).then(() => undefined);
+    return funcoes.origemRemove(origin).then(() => undefined);
 }
 
 const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {
