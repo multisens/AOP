@@ -1,8 +1,15 @@
 // Gestor de perfis da PLATAFORMA (M1 + P3): criacao de perfil e regra de
 // teto vivem aqui — nao sao endpoint das APIs de usuario do Anexo C. A
-// escrita e direta no armazenamento; a antiga rota fora-da-spec
-// POST /tv3/users do tv3ws deixa de existir.
+// escrita e da plataforma; a antiga rota fora-da-spec POST /tv3/users do
+// tv3ws deixa de existir.
+// P4 (Luis, 10/10): criacao, despejo e lastAccess passam pelas funcoes do
+// Redis (../../redis-funcoes.js), que conferem o esquema da Tabela 7
+// (infra/redis/esquema.json) e gravam as chaves do perfil juntas. A
+// validacao abaixo continua: e ela que responde 400 com a mensagem para o
+// formulario; a recusa da funcao (dado que passou daqui fora do esquema) e
+// defeito da plataforma e responde 404 {error:200}.
 const redis = require('../../redis-client');
+const funcoes = require('../../redis-funcoes');
 const { DEFAULT_AVATAR_SVG } = require('./avatar');
 
 // P3: limite de cinco perfis, com despejo por ultimo acesso mais antigo.
@@ -10,6 +17,21 @@ const MAX_PROFILES = 5;
 
 const VALID_RATINGS = ['L', '10', '12', '14', '16', '18'];
 const VALID_SIDES = ['left', 'right'];
+
+// Tabela 7: idiomas em IETF RFC 5646. Mesma conferencia de formato da funcao
+// do Redis (idiomaOk em infra/redis/funcoes.lua): subetiquetas de 1 a 8
+// letras ou digitos separadas por '-', a primeira so de letras (2 a 8) ou o
+// singleton x/i. Nao confere o registro IANA.
+function isLanguageTag(v) {
+    if (typeof v !== 'string') return false;
+    const parts = v.split('-');
+    if (!parts.every(p => /^[A-Za-z0-9]{1,8}$/.test(p))) return false;
+    return /^[A-Za-z]{2,8}$/.test(parts[0]) || parts[0] === 'x' || parts[0] === 'i';
+}
+const LANGUAGE_FIELDS = ['audioLanguage', 'userInterfaceLanguage', 'closedCaptioningLanguage'];
+// visibilidade por servico: o id do servico, como em aop/currentService
+// (schemas.json do broker: ate 256 caracteres)
+const MAX_SERVICE_ID = 256;
 
 // Erro do dado enviado (resposta 400 com a mensagem, contrato da view de
 // criacao). Falha do armazenamento NAO e ValidationError: sobe e vira
@@ -40,6 +62,20 @@ function validateProfile(userData) {
             throw new ValidationError('closedSigningSide deve ser "left" ou "right"');
         }
     }
+
+    // P4: o que o esquema do Redis tambem confere e o formulario nao limita
+    for (const f of LANGUAGE_FIELDS) {
+        // a de legenda so e gravada com closedCaptioning ligado (createProfile)
+        if (f === 'closedCaptioningLanguage' && !userData.closedCaptioning) continue;
+        if (userData[f] !== undefined && userData[f] !== '' && !isLanguageTag(userData[f])) {
+            throw new ValidationError(`${f} deve ser uma etiqueta de idioma IETF RFC 5646, como pt-BR`);
+        }
+    }
+    if (userData.accessConsent !== undefined) {
+        const ok = Array.isArray(userData.accessConsent) && userData.accessConsent.every(
+            s => typeof s === 'string' && s.length > 0 && [...s].length <= MAX_SERVICE_ID);
+        if (!ok) throw new ValidationError(`accessConsent deve ser uma lista de ids de serviço (texto de 1 a ${MAX_SERVICE_ID} caracteres)`);
+    }
     return nickname;
 }
 
@@ -48,18 +84,12 @@ function validateProfile(userData) {
 // — cria, despeja (P3) e, desde 05/10, e a UNICA que grava o lastAccess
 // (antes gravado pelo tv3ws ao receber aop/currentUser). Grava so se o perfil
 // existe em users:index: o HSET avulso de antes criava hash fantasma
-// user:{id} para id desconhecido. Teste e escrita atomicos (Lua), para nao
-// recriar um perfil despejado no meio.
-const TOUCH_LAST_ACCESS = `if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 1 then
-  redis.call('HSET', KEYS[2], 'lastAccess', ARGV[2])
-  return 1
-end
-return 0`;
-
+// user:{id} para id desconhecido. Teste e escrita atomicos (funcao
+// tv30_perfil_ultimo_acesso; antes, script EVAL daqui), para nao recriar um
+// perfil despejado no meio.
 async function touchLastAccess(id, now = Date.now()) {
     if (!id) return false;
-    const r = await redis.eval(TOUCH_LAST_ACCESS, 2, 'users:index', `user:${id}`, String(id), String(now));
-    return Number(r) === 1;
+    return funcoes.perfilUltimoAcesso(String(id), String(now));
 }
 
 // Ultimo acesso do perfil: gravado quando ele vira o usuario corrente
@@ -87,15 +117,14 @@ async function evictLeastRecentlyUsed() {
     }
     if (!oldest) return null;
 
-    await redis.srem('users:index', oldest.id);
-    await redis.del(`user:${oldest.id}`, `user:${oldest.id}:consent`);
-    // areas privativas por contexto de servico do perfil despejado
+    // users:index, user:{id}, user:{id}:consent e as areas privativas por
+    // contexto de servico (user:{id}:broadcaster-attrs:*) saem juntos, numa
+    // funcao so (P4; antes SREM, DEL, KEYS e DEL avulsos).
     // PENDENTE (Joel): user:{id}:broadcaster-attrs:{scid} tem dois escritores
     // — o tv3ws grava (C.6.14.5) e a plataforma apaga aqui no despejo (P3).
     // P5 pede um dono por familia de chave; quem e o dono desta nao foi
     // decidido em 05/10. Mantido como estava.
-    const attrKeys = await redis.keys(`user:${oldest.id}:broadcaster-attrs:*`);
-    if (attrKeys.length > 0) await redis.del(...attrKeys);
+    await funcoes.perfilRemove(oldest.id);
 
     return oldest;
 }
@@ -147,12 +176,9 @@ async function createProfile(userData) {
     for (const [k, v] of Object.entries(newUser)) {
         if (v !== null && v !== undefined) hashFields[k] = String(v);
     }
-    await redis.sadd('users:index', userId);
-    await redis.del(`user:${userId}`);
-    await redis.hset(`user:${userId}`, hashFields);
-    if (accessConsent.length > 0) {
-        await redis.sadd(`user:${userId}:consent`, ...accessConsent);
-    }
+    // users:index + user:{id} (DEL + HSET) + user:{id}:consent numa funcao so,
+    // que confere a Tabela 7 (P4; antes SADD, DEL, HSET e SADD avulsos)
+    await funcoes.perfilGrava(userId, accessConsent, hashFields);
 
     return { user: { ...newUser, accessConsent }, evicted };
 }
