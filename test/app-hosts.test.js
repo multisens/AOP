@@ -6,7 +6,9 @@
 //   grafica recebe;
 // - roteamento por Host: proxy para a aplicacao em execucao, 404 para rotulo
 //   sem aplicacao, paginas do AoP intactas, e o caminho antigo
-//   /graphicsAppProxy sem registro de origem.
+//   /graphicsAppProxy no host do AoP redirecionando (302) para o host da
+//   aplicacao (decisao do Luis em 11/10), e o prefixo /graphicsAppProxy
+//   opcional no host da aplicacao.
 // Sem Redis, MQTT nem bcast de verdade: o "bcast" e um servidor HTTP local.
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -108,7 +110,7 @@ function request(port, { host, method = 'GET', path: p = '/', body, headers = {}
             let data = '';
             res.setEncoding('utf8');
             res.on('data', c => { data += c; });
-            res.on('end', () => resolve({ status: res.statusCode, body: data }));
+            res.on('end', () => resolve({ status: res.statusCode, body: data, location: res.headers.location }));
         });
         req.on('error', reject);
         if (body) req.write(body);
@@ -133,7 +135,7 @@ async function withAop(fn) {
     app.use(express.json());
     app.get('/', (req, res) => res.send('pagina do AoP'));
     app.post('/eco', (req, res) => res.json({ aop: true, body: req.body }));
-    app.use('/graphicsAppProxy', appHosts.legacyGraphicsProxy({ getTarget: core.getGraphicsAppURL, log: quiet }));
+    app.use('/graphicsAppProxy', appHosts.legacyGraphicsRedirect({ getApp: core.getGraphicsApp, log: quiet }));
     const server = await new Promise(r => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
     try { return await fn(server.address().port); }
     finally { await close(server); }
@@ -167,12 +169,20 @@ test('appLabel: rotulo DNS valido (minusculas, [a-z0-9-], ate 63) derivado do id
     }
 });
 
-test('appOrigin e entryUrl: como o navegador escreve o Origin (porta 80 omitida)', () => {
+test('appOrigin e entryUrl: como o navegador escreve o Origin (porta 80 omitida); a URL leva /graphicsAppProxy', () => {
     assert.equal(appHosts.appOrigin('x', { domain: 'apps.localhost', port: 8080 }), 'http://x.apps.localhost:8080');
     assert.equal(appHosts.appOrigin('x', { domain: 'apps.tv.lan', port: 80 }), 'http://x.apps.tv.lan');
-    assert.equal(appHosts.entryUrl('http://x.apps.localhost:8080', '/users-test'), 'http://x.apps.localhost:8080/users-test');
-    assert.equal(appHosts.entryUrl('http://x.apps.localhost:8080', 'index.html'), 'http://x.apps.localhost:8080/index.html');
-    assert.equal(appHosts.entryUrl('http://x.apps.localhost:8080', ''), 'http://x.apps.localhost:8080/');
+    assert.equal(appHosts.entryUrl('http://x.apps.localhost:8080', '/users-test'), 'http://x.apps.localhost:8080/graphicsAppProxy/users-test');
+    assert.equal(appHosts.entryUrl('http://x.apps.localhost:8080', 'index.html'), 'http://x.apps.localhost:8080/graphicsAppProxy/index.html');
+    assert.equal(appHosts.entryUrl('http://x.apps.localhost:8080', ''), 'http://x.apps.localhost:8080/graphicsAppProxy/');
+});
+
+test('stripPrefix: tira /graphicsAppProxy so quando ele e um segmento inteiro', () => {
+    assert.equal(appHosts.stripPrefix('/graphicsAppProxy/users-test?x=1'), '/users-test?x=1');
+    assert.equal(appHosts.stripPrefix('/graphicsAppProxy'), '/');
+    assert.equal(appHosts.stripPrefix('/graphicsAppProxy?x=1'), '/?x=1');
+    assert.equal(appHosts.stripPrefix('/graphicsAppProxyX/a'), '/graphicsAppProxyX/a');
+    assert.equal(appHosts.stripPrefix('/js/navigation.js'), '/js/navigation.js');
     assert.equal(appHosts.describeApp('urn:a', 'nao-e-url', { domain: 'apps.localhost', port: 8080 }), null);
     assert.equal(appHosts.describeApp('urn:a', 'ftp://bcast/x', { domain: 'apps.localhost', port: 8080 }), null);
 });
@@ -212,16 +222,16 @@ test('lancamento pela BALD: registra a origem PROPRIA da aplicacao (nao o alvo d
 
     const origin = 'http://urn-tv30-app-k1a2b3.apps.localhost:8080';
     assert.deepEqual(origins(), { [origin]: SID });
-    assert.equal(lastGraphics(), `${origin}/users-test`);
+    assert.equal(lastGraphics(), `${origin}/graphicsAppProxy/users-test`);
     assert.equal(core.getGraphicsAppByLabel('urn-tv30-app-k1a2b3').target, 'http://bcast:8081');
     assert.equal(core.getGraphicsAppByLabel('outra'), null);
-    assert.equal(core.getGraphicsAppURL(), 'http://bcast:8081');   // alvo do caminho antigo
+    assert.equal(core.getGraphicsApp().origin, origin);   // destino do redirecionamento do caminho antigo
 });
 
 test('troca de aplicacao: remove a origem anterior e registra a nova; relancar a mesma nao a remove', async () => {
     await core.setDisplayGraphics('http://bcast:8081', '/webmedia', 'urn:tv30:app:w9');
     assert.deepEqual(origins(), { 'http://urn-tv30-app-w9.apps.localhost:8080': SID });
-    assert.equal(lastGraphics(), 'http://urn-tv30-app-w9.apps.localhost:8080/webmedia');
+    assert.equal(lastGraphics(), 'http://urn-tv30-app-w9.apps.localhost:8080/graphicsAppProxy/webmedia');
 
     writes.length = 0;
     await core.setDisplayGraphics('http://bcast:8081', '/webmedia', 'urn:tv30:app:w9');
@@ -260,7 +270,7 @@ test('encerramento (tecla de saida): remove a origem e esvazia a camada grafica'
     assert.deepEqual(origins(), {});
     assert.equal(lastGraphics(), '');
     assert.equal(core.getGraphicsAppByLabel('urn-tv30-service-users-test'), null);
-    assert.equal(core.getGraphicsAppURL(), '');
+    assert.equal(core.getGraphicsApp(), null);
 });
 
 test('bcastEntryPackageUrl invalido: nada registrado nem aberto', async () => {
@@ -296,6 +306,14 @@ test('host da aplicacao vai ao proxy dela, com corpo intacto; outros hosts segue
             r = await request(port, { host, path: '/' });   // a raiz e da aplicacao, nao a pagina do AoP
             assert.equal(JSON.parse(r.body).url, '/');
 
+            // prefixo /graphicsAppProxy (decisao do Luis em 11/10): opcional no
+            // host da aplicacao; com ele, sai antes de ir ao alvo
+            r = await request(port, { host, path: '/graphicsAppProxy/users-test?x=1' });
+            assert.equal(r.status, 200);
+            assert.equal(JSON.parse(r.body).url, '/users-test?x=1');
+            r = await request(port, { host, path: '/js/navigation.js' });   // pedido a partir da raiz: arquivo da aplicacao
+            assert.equal(JSON.parse(r.body).url, '/js/navigation.js');
+
             r = await request(port, { host, method: 'POST', path: '/eco', body: '{"a":1}' });
             j = JSON.parse(r.body);
             assert.equal(j.bcast, true);
@@ -321,16 +339,19 @@ test('host da aplicacao vai ao proxy dela, com corpo intacto; outros hosts segue
     } finally { await close(bcast); }
 });
 
-test('caminho antigo /graphicsAppProxy: continua indo a aplicacao em execucao e nao grava origem', async () => {
+test('caminho antigo /graphicsAppProxy no host do AoP: 302 para o host da aplicacao, sem gravar origem', async () => {
     const bcast = await fakeBcast();
     try {
         await core.setDisplayGraphics(`http://127.0.0.1:${bcast.address().port}`, '/users-test', 'urn:tv30:app:l1');
         const before = origins();
         writes.length = 0;
         await withAop(async port => {
-            const r = await request(port, { host: 'localhost:8080', path: '/graphicsAppProxy/users-test' });
-            assert.equal(r.status, 200);
-            assert.equal(JSON.parse(r.body).url, '/users-test');
+            let r = await request(port, { host: 'localhost:8080', path: '/graphicsAppProxy/users-test?x=1' });
+            assert.equal(r.status, 302);
+            assert.equal(r.location, 'http://urn-tv30-app-l1.apps.localhost:8080/graphicsAppProxy/users-test?x=1');
+            r = await request(port, { host: 'localhost:8080', path: '/graphicsAppProxy' });
+            assert.equal(r.status, 302);
+            assert.equal(r.location, 'http://urn-tv30-app-l1.apps.localhost:8080/graphicsAppProxy/');
         });
         assert.deepEqual(writes, []);
         assert.deepEqual(origins(), before);
@@ -342,7 +363,7 @@ test('caminho antigo /graphicsAppProxy: continua indo a aplicacao em execucao e 
     }
 });
 
-test('aplicacao fora do ar: host dela responde 502; caminho antigo, 500 como antes', async () => {
+test('aplicacao fora do ar: host dela responde 502; sem aplicacao, o caminho antigo responde 404', async () => {
     const bcast = await fakeBcast();
     const port0 = bcast.address().port;
     await close(bcast);   // porta fechada
@@ -351,9 +372,12 @@ test('aplicacao fora do ar: host dela responde 502; caminho antigo, 500 como ant
         await withAop(async port => {
             let r = await request(port, { host: 'urn-tv30-app-d1.apps.localhost:8080', path: '/users-test' });
             assert.equal(r.status, 502);
+            r = await request(port, { host: 'urn-tv30-app-d1.apps.localhost:8080', path: '/graphicsAppProxy/users-test' });
+            assert.equal(r.status, 502);
+            await core.setDisplayGraphics();   // encerra
             r = await request(port, { host: 'localhost:8080', path: '/graphicsAppProxy/users-test' });
-            assert.equal(r.status, 500);
-            assert.equal(r.body, 'GraphicsAppProxy Error');
+            assert.equal(r.status, 404);
+            assert.match(r.body, /nenhuma aplicacao em execucao/);
         });
     } finally { await core.setDisplayGraphics(); }
 });

@@ -75,11 +75,12 @@ app.use(core.GUI.app_catalogue, mod_appcat);
 app.use(core.GUI.bootstrap_app, mod_btpapp);
 app.use('/', mod_disp);
 
-// Caminho ANTIGO da aplicacao de emissora, na origem do AoP. A camada grafica
-// nao o usa desde o P1.3 (abre o host proprio da aplicacao); fica enquanto
-// houver quem use (scripts/test-dev-host.sh, curl direto) e NAO registra
-// origem associada. Ver ./app-hosts.js.
-app.use('/graphicsAppProxy', appHosts.legacyGraphicsProxy({ getTarget: core.getGraphicsAppURL }));
+// Caminho ANTIGO da aplicacao de emissora, na origem do AoP (antes do P1.3,
+// sem reconhecimento como associada). Desde a decisao do Luis em 11/10,
+// redireciona (302) para o mesmo caminho no host da aplicacao em execucao,
+// http://<app>.<APPS_DOMAIN>:<porta>/graphicsAppProxy/...; sem aplicacao,
+// 404. Ver ./app-hosts.js.
+app.use('/graphicsAppProxy', appHosts.legacyGraphicsRedirect({ getApp: core.getGraphicsApp }));
 
 // B.6.3: o proxy respeita os metadados de cache da origem (ETag,
 // Last-Modified, Expires). A politica antiga — apagar esses cabecalhos e

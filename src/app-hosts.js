@@ -1,9 +1,9 @@
 // Origem propria por aplicacao de emissora (P1.3, decisao do Luis em 10/10).
 //
 // Cada aplicacao de emissora abre num nome de host proprio, na MESMA porta do
-// AoP: http://<rotulo>.<APPS_DOMAIN>:<AOP_PUBLIC_PORT>/<bcastEntryPointUrl>.
+// AoP: http://<rotulo>.<APPS_DOMAIN>:<AOP_PUBLIC_PORT>/graphicsAppProxy/<bcastEntryPointUrl>.
 // O AoP atende esses nomes com um proxy para o alvo da aplicacao (o
-// bcastEntryPackageUrl da BALD, o mesmo alvo do antigo /graphicsAppProxy), e
+// bcastEntryPackageUrl da BALD), e
 // o navegador passa a mandar, nas chamadas da aplicacao as APIs, o Origin
 // dela — que o AoP registra em origins:associated ao lancar a aplicacao e
 // remove ao encerrar (core.js). E por esse Origin que a borda e o tv3ws
@@ -19,8 +19,16 @@
 // Rotulo: derivado do appId da entrada da BALD (Tabela 10, uso 1: "URN that
 // uniquely identifies the Broadcaster Application"; p. 78; p. 96 do PDF) —
 // minusculas, so [a-z0-9-], ate 63 caracteres (rotulo DNS). Sem appId, vale o
-// id do servico corrente (core.js). O bcast gera appId novo a cada publicacao
-// da BALD (cuid.slug), entao o nome do host muda a cada reinicio do bcast.
+// id do servico corrente (core.js). Desde a decisao do Luis em 11/10 o bcast
+// usa um appId FIXO por aplicacao (urn:tv30:app:<modulo>), entao o nome do
+// host (e o que a aplicacao guarda no navegador) sobrevive ao reinicio dele.
+//
+// Prefixo /graphicsAppProxy (decisao do Luis em 11/10): a URL que a camada
+// grafica abre mantem o prefixo do caminho antigo, para quem ja conhece o
+// projeto ver por onde a aplicacao passa. No host da aplicacao o prefixo e
+// opcional: com ele, sai antes de ir ao alvo; sem ele (os /js/... e /media/...
+// que a pagina pede a partir da raiz), vai ao alvo como esta. O Origin e so
+// esquema, host e porta: o prefixo nao muda o reconhecimento pela borda.
 //
 // LIMITE: *.localhost resolve para a maquina de QUEM abre a pagina. Com a tela
 // do AoP aberta de outra maquina, os nomes <rotulo>.apps.localhost apontam
@@ -28,16 +36,17 @@
 // APPS_DOMAIN deve ser um dominio resolvivel na rede, com *.<dominio>
 // apontando para a maquina do AoP (DNS curinga).
 //
-// O antigo /graphicsAppProxy continua (legacyGraphicsProxy, abaixo) para os
-// scripts de teste e o dev-host que o usam; ele NAO registra origem associada:
-// a aplicacao aberta por ele fica na origem do AoP e nao e reconhecida como
-// associada.
+// O /graphicsAppProxy no host do PROPRIO AoP (o caminho de antes do P1.3, que
+// deixava a aplicacao na origem do AoP, sem reconhecimento como associada)
+// redireciona (302) para o host da aplicacao em execucao (legacyGraphicsRedirect,
+// abaixo; decisao do Luis em 11/10).
 const crypto = require('crypto');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const DEFAULT_APPS_DOMAIN = 'apps.localhost';
 const DEFAULT_PUBLIC_PORT = 8080;
 const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const PROXY_PREFIX = '/graphicsAppProxy';
 // nome completo ate 253: rotulo (63) + '.' + dominio
 const MAX_DOMAIN = 253 - 64;
 
@@ -96,10 +105,21 @@ function describeApp(appId, target, cfg) {
     return Object.freeze({ appId: id, label, origin: appOrigin(label, cfg), target: String(target) });
 }
 
-// URL que a camada grafica abre: origem da aplicacao + bcastEntryPointUrl.
+// URL que a camada grafica abre: origem da aplicacao + /graphicsAppProxy +
+// bcastEntryPointUrl.
 function entryUrl(origin, entryPoint = '') {
     const ep = entryPoint ? String(entryPoint) : '';
-    return origin + (ep.startsWith('/') ? ep : `/${ep}`);
+    return origin + PROXY_PREFIX + (ep.startsWith('/') ? ep : `/${ep}`);
+}
+
+// Caminho no host da aplicacao sem o prefixo /graphicsAppProxy (so quando ele
+// e um segmento inteiro: /graphicsAppProxyX nao e o prefixo).
+function stripPrefix(url) {
+    const u = String(url || '/');
+    if (u === PROXY_PREFIX) return '/';
+    if (u.startsWith(`${PROXY_PREFIX}/`)) return u.slice(PROXY_PREFIX.length);
+    if (u.startsWith(`${PROXY_PREFIX}?`)) return `/${u.slice(PROXY_PREFIX.length)}`;
+    return u;
 }
 
 // Rotulo do cabecalho Host quando ele esta no dominio das aplicacoes; null
@@ -157,29 +177,28 @@ function appHostProxy({ cfg, lookup, log = console }) {
             return;
         }
         req.graphicsAppTarget = app.target;
+        req.url = stripPrefix(req.url);
         return proxy(req, res, next);
     };
 }
 
-// Caminho antigo, mantido enquanto houver quem use (scripts/test-dev-host.sh;
-// curl direto): /graphicsAppProxy/<caminho> vai ao alvo da aplicacao em
-// execucao, NA ORIGEM DO AoP. Nao registra origem associada (P1.3): a camada
-// grafica nao usa mais este caminho.
-function legacyGraphicsProxy({ getTarget, log = console }) {
-    return createProxyMiddleware({
-        target: '',
-        changeOrigin: true,
-        router: () => getTarget(),
-        pathRewrite: {
-            '^/graphicsAppProxy': ''
-        },
-        on: {
-            proxyReq: (proxyReq, req) => {
-                log.log(`Redirecting '${req.url}' to '${getTarget()}${proxyReq.path}'`);
-            },
-            error: proxyError('GraphicsAppProxy', 500, 'GraphicsAppProxy Error', log),
-        },
-    });
+// /graphicsAppProxy/<caminho> no host do PROPRIO AoP (montado em
+// app.use('/graphicsAppProxy', ...): req.url ja vem sem o prefixo). Antes do
+// P1.3 era assim que a aplicacao abria, na origem do AoP e sem reconhecimento
+// como associada. Desde a decisao do Luis em 11/10, redireciona (302) para o
+// mesmo caminho no host da aplicacao em execucao; sem aplicacao, 404.
+// getApp() devolve a aplicacao em execucao ({ origin, ... }) ou null.
+function legacyGraphicsRedirect({ getApp, log = console }) {
+    return function legacyRedirect(req, res) {
+        const app = getApp();
+        if (!app) {
+            res.status(404).type('text/plain').send('nenhuma aplicacao em execucao na camada grafica');
+            return;
+        }
+        const to = app.origin + PROXY_PREFIX + (req.url.startsWith('/') ? req.url : `/${req.url}`);
+        log.log(`[apps] caminho antigo '${req.headers.host}${req.originalUrl}' -> 302 ${to}`);
+        res.redirect(302, to);
+    };
 }
 
 module.exports = {
@@ -190,7 +209,9 @@ module.exports = {
     appOrigin,
     describeApp,
     entryUrl,
+    stripPrefix,
     hostLabel,
     appHostProxy,
-    legacyGraphicsProxy,
+    legacyGraphicsRedirect,
+    PROXY_PREFIX,
 };

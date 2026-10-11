@@ -348,10 +348,11 @@ function setBALDHandler(handler) {
     DATA.serviceMetadata.baldHandler = handler;
 }
 
-// Alvo do proxy da aplicacao em execucao ('' sem aplicacao); usado pelo
-// caminho antigo /graphicsAppProxy.
-function getGraphicsAppURL() {
-    return DATA.graphicsApp ? DATA.graphicsApp.target : '';
+// Aplicacao em execucao na camada grafica ({ appId, label, origin, target })
+// ou null; usada pelo redirecionamento do caminho antigo /graphicsAppProxy no
+// host do AoP (decisao do Luis em 11/10).
+function getGraphicsApp() {
+    return DATA.graphicsApp;
 }
 
 // Aplicacao em execucao com este rotulo de host, ou null (roteamento por Host
@@ -396,7 +397,7 @@ module.exports = {
     getServiceList,
     getServiceSLS,
     setBALDHandler,
-    getGraphicsAppURL,
+    getGraphicsApp,
     getGraphicsAppByLabel,
     getVideoStreamURL,
     openServiceInfo,
