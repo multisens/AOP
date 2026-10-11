@@ -16,6 +16,12 @@ const express = require('express');
 const { FAIL_FAST_OPTIONS, redisOptions, logRedisEvents, whenReady } = require('../src/redis-options');
 const { platformErrorHandler } = require('../src/http-error');
 
+// ids de perfil em UUID (Tabela 7; decisao do Luis em 11/10, F-3): o duble
+// nao confere o esquema, mas os ids sao do formato que o Redis aceita
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const UM = '0b6f3e2a-7c1d-4e5f-9a8b-2c3d4e5f6a7b';
+const perfil = i => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+
 // --- dubles ---------------------------------------------------------------------
 const FAIL = 'redis indisponivel (duble de teste)';
 const store = new Map();
@@ -186,10 +192,10 @@ test('whenReady: tarefa de boot roda uma vez, no primeiro ready', async () => {
 // --- D-0510-5: lastAccess -------------------------------------------------------
 test('touchLastAccess grava so em perfil existente (sem hash fantasma)', async () => {
     store.clear();
-    store.set('users:index', new Set(['user_1']));
-    store.set('user:user_1', { nickname: 'Um' });
-    assert.equal(await profiles.touchLastAccess('user_1', 1234), true);
-    assert.equal(store.get('user:user_1').lastAccess, '1234');
+    store.set('users:index', new Set([UM]));
+    store.set(`user:${UM}`, { nickname: 'Um' });
+    assert.equal(await profiles.touchLastAccess(UM, 1234), true);
+    assert.equal(store.get(`user:${UM}`).lastAccess, '1234');
     assert.equal(await profiles.touchLastAccess('desconhecido', 1234), false);
     assert.equal(store.has('user:desconhecido'), false);
     assert.equal(await profiles.touchLastAccess(''), false);
@@ -245,6 +251,12 @@ test('createProfile: UMA chamada tv30_perfil_grava com a visibilidade do servico
     assert.equal(h.parentalControl, 'false');
     assert.equal(h.maxContentRating, undefined, 'condicional falso fica fora do hash');
     assert.match(h.lastAccess, /^[1-9]\d*$/);
+    // F-3 (decisao do Luis em 11/10): id em UUID (Tabela 7), formato da RFC
+    // 9562 em minusculas; dois perfis nunca recebem o mesmo
+    assert.match(user.id, UUID_RE);
+    const { user: outro } = await profiles.createProfile({ nickname: 'Outro' });
+    assert.match(outro.id, UUID_RE);
+    assert.notEqual(outro.id, user.id);
 });
 
 test('despejo (P3): UMA chamada tv30_perfil_remove com o perfil de ultimo acesso mais antigo', async () => {
@@ -252,17 +264,36 @@ test('despejo (P3): UMA chamada tv30_perfil_remove com o perfil de ultimo acesso
     fcalls.length = 0;
     const idx = new Set();
     for (let i = 1; i <= 5; i++) {
-        idx.add(`user_${i}`);
-        store.set(`user:user_${i}`, { nickname: `P${i}`, lastAccess: String(1000 + i) });
+        idx.add(perfil(i));
+        store.set(`user:${perfil(i)}`, { nickname: `P${i}`, lastAccess: String(1000 + i) });
     }
-    store.set('user:user_3', { nickname: 'P3', lastAccess: '10' });
-    store.set('user:user_3:broadcaster-attrs:urn:s', { a: '1' });
+    store.set(`user:${perfil(3)}`, { nickname: 'P3', lastAccess: '10' });
+    store.set(`user:${perfil(3)}:broadcaster-attrs:urn:s`, { a: '1' });
     store.set('users:index', idx);
     const { evicted } = await profiles.createProfile({ nickname: 'Sexto' });
-    assert.equal(evicted.id, 'user_3');
-    assert.deepEqual(fcalls.map(c => c.slice(0, 2)), [['tv30_perfil_remove', 'user_3'], ['tv30_perfil_grava', fcalls[1][1]]]);
-    assert.equal(store.has('user:user_3:broadcaster-attrs:urn:s'), false);
+    assert.equal(evicted.id, perfil(3));
+    assert.deepEqual(fcalls.map(c => c.slice(0, 2)), [['tv30_perfil_remove', perfil(3)], ['tv30_perfil_grava', fcalls[1][1]]]);
+    assert.equal(store.has(`user:${perfil(3)}:broadcaster-attrs:urn:s`), false);
     assert.equal(setOf('users:index').size, 5);
+});
+
+// F-3 (decisao do Luis em 11/10): o id e UUID e nao carrega instante. Perfil
+// sem lastAccess (carga inicial nunca usada) e o mais antigo, qualquer que seja
+// o id — a leitura antiga do instante embutido no id (user_<epoch-ms>) daria a
+// este UUID, que comeca por digitos, o instante 99999999 e despejaria outro.
+test('despejo (P3): perfil sem lastAccess conta como o mais antigo, sem tirar instante do id', async () => {
+    store.clear();
+    fcalls.length = 0;
+    const semAcesso = '99999999-9999-4999-8999-999999999999';
+    const idx = new Set([semAcesso]);
+    store.set(`user:${semAcesso}`, { nickname: 'Carga' });
+    for (let i = 1; i <= 4; i++) {
+        idx.add(perfil(i));
+        store.set(`user:${perfil(i)}`, { nickname: `P${i}`, lastAccess: String(1000 + i) });
+    }
+    store.set('users:index', idx);
+    const { evicted } = await profiles.createProfile({ nickname: 'Sexto' });
+    assert.equal(evicted.id, semAcesso);
 });
 
 test('POST /profile/create: idioma ou visibilidade fora do esquema 400 (antes de gravar); recusa da funcao 404 {error:200}', async () => {
@@ -288,7 +319,7 @@ test('POST /profile/create: idioma ou visibilidade fora do esquema 400 (antes de
         let r = await post({ nickname: 'X', closedCaptioning: false, closedCaptioningLanguage: 'qualquer coisa' });
         assert.equal(r.status, 201);
 
-        const msg = 'TV30ESQUEMA tv30_perfil_grava: user:user_1 campo nickname: tem 21 caracteres, maximo 20';
+        const msg = `TV30ESQUEMA tv30_perfil_grava: user:${UM} campo nickname: tem 21 caracteres, maximo 20`;
         recusa = ['tv30_perfil_grava', msg];
         try {
             r = await post({ nickname: 'Novo' });

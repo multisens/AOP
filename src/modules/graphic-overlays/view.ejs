@@ -134,8 +134,15 @@
             let player = null;
             let publishTopic = null;
 
-            function connect(host) {
-                const client = mqtt.connect(`ws://${host}:<%= mqtt_ws_port %>/mqtt`, {
+            // MQTT por WebSocket na PROPRIA origem da pagina, caminho /mqtt (C1,
+            // decisao do Luis em 11/10): o AoP atende o upgrade e o repassa ao
+            // mosquitto (src/mqtt-ws.js). Antes a pagina conectava direto na
+            // 9001 do host, que deixou de ser porta fixa. location.host traz o
+            // nome e a porta pelos quais o usuario abriu a pagina (localhost, IP
+            // da LAN etc.), nunca um nome de servico do Docker.
+            function connect() {
+                const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+                const client = mqtt.connect(`${scheme}://${window.location.host}/mqtt`, {
                     clean: false,
                     connectTimeout: 4000,
                     clientId: 'rp-display',
@@ -301,10 +308,7 @@
 
         <script>
             document.addEventListener('keydown', relay_key);
-            // Browser perspective: use o hostname pelo qual o usuario abriu a pagina
-            // (localhost, IP da LAN, etc.) — nao o env MQTT_HOST do server, que pode
-            // ser um nome de service Docker so resolvivel dentro do container.
-            connect(window.location.hostname || '<%= mqtt_host %>');
+            connect();
 
             const video = document.getElementById("video");
             setInterval(() => {
