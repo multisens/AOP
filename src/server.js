@@ -28,6 +28,18 @@ try {
     process.exit(1);
 }
 
+// C1 (decisao do Luis em 11/10): o MQTT por WebSocket da pagina da TV entra
+// pela porta do AoP, em /mqtt, e segue para ws://${MQTT_HOST}:${MQTT_WS_PORT}
+// (padrao 9001). Valor invalido encerra o boot. Ver ./mqtt-ws.js.
+const mqttWs = require('./mqtt-ws');
+let MQTT_WS;
+try {
+    MQTT_WS = mqttWs.mqttWsConfig();
+} catch (err) {
+    console.error(`[boot] ${err.message}`);
+    process.exit(1);
+}
+
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
@@ -108,9 +120,14 @@ app.use('/videoStreamProxy', proxyStream);
 // excecao em rota (ex.: Redis fora do ar) -> 404 {error:200} (D-0510-6)
 app.use(require('./http-error').platformErrorHandler);
 
-app.listen(_PORT, () => {
+const server = app.listen(_PORT, () => {
     console.log(`AoP running on port: ${_PORT}`);
 });
+
+// Upgrade WebSocket: so /mqtt no host do AoP vai ao broker; o resto (outro
+// caminho, host de aplicacao) responde 404 (C1, decisao do Luis em 11/10).
+server.on('upgrade', mqttWs.mqttWsUpgrade({ apps: APPS, mqtt: MQTT_WS }));
+console.log(`[mqtt-ws] MQTT por WebSocket em ws://<host do AoP>${mqttWs.MQTT_WS_PATH} -> ${MQTT_WS.target}`);
 
 // notify loading is complete
 if (process.send) {

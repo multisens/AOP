@@ -5,12 +5,11 @@ const express = require('express');
 const path = require('path');
 const router = express.Router();
 
+// A pagina conecta o MQTT por WebSocket na propria origem, em /mqtt (C1,
+// decisao do Luis em 11/10; ../../mqtt-ws.js): nao recebe mais host nem
+// porta do broker.
 router.get('/', async (req, res) => {
-    const html = await ejs.renderFile(path.join(__dirname, 'view.ejs'),
-        {
-            mqtt_host: process.env.MQTT_HOST || 'localhost',
-            mqtt_ws_port: process.env.MQTT_WS_PORT || '9001'
-        });
+    const html = await ejs.renderFile(path.join(__dirname, 'view.ejs'), {});
     res.send(html);
 });
 

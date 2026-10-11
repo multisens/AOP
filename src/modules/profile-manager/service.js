@@ -8,6 +8,7 @@
 // validacao abaixo continua: e ela que responde 400 com a mensagem para o
 // formulario; a recusa da funcao (dado que passou daqui fora do esquema) e
 // defeito da plataforma e responde 404 {error:200}.
+const crypto = require('crypto');
 const redis = require('../../redis-client');
 const funcoes = require('../../redis-funcoes');
 const { DEFAULT_AVATAR_SVG } = require('./avatar');
@@ -92,14 +93,15 @@ async function touchLastAccess(id, now = Date.now()) {
     return funcoes.perfilUltimoAcesso(String(id), String(now));
 }
 
-// Ultimo acesso do perfil: gravado quando ele vira o usuario corrente
-// (lastAccess no hash, touchLastAccess). Perfil que nunca foi usado conta
-// pelo instante de criacao embutido no id (user_<epoch-ms>).
-function lastAccessOf(id, fields) {
+// Ultimo acesso do perfil: gravado na criacao e quando ele vira o usuario
+// corrente (lastAccess no hash, touchLastAccess). Sem lastAccess (ex.: perfil
+// da carga inicial nunca usado), conta como o mais antigo (0). Desde a decisao
+// do Luis em 11/10 (F-3) o id e UUID e nao carrega instante nenhum; antes, o
+// instante de criacao saia do id user_<epoch-ms> — e um UUID que comeca por
+// digitos viraria um instante falso nessa leitura.
+function lastAccessOf(fields) {
     const explicit = parseInt(fields.lastAccess || '', 10);
-    if (!isNaN(explicit)) return explicit;
-    const fromId = parseInt(String(id).replace(/^user_/, ''), 10);
-    return isNaN(fromId) ? 0 : fromId;
+    return isNaN(explicit) ? 0 : explicit;
 }
 
 async function evictLeastRecentlyUsed() {
@@ -109,7 +111,7 @@ async function evictLeastRecentlyUsed() {
     let oldestTs = Infinity;
     for (const id of ids) {
         const fields = await redis.hgetall(`user:${id}`);
-        const ts = lastAccessOf(id, fields);
+        const ts = lastAccessOf(fields);
         if (ts < oldestTs) {
             oldestTs = ts;
             oldest = { id, nickname: fields.nickname || fields.name || id };
@@ -140,7 +142,11 @@ async function createProfile(userData) {
         if (!evicted) break;
     }
 
-    const userId = `user_${Date.now()}`;
+    // Tabela 7: id "UUID string". Decisao do Luis em 11/10 (F-3): UUID no
+    // formato da RFC 9562, em minusculas (o randomUUID gera a versao 4 assim),
+    // sem compatibilidade com o id antigo user_<epoch-ms>; pela mesma decisao,
+    // o esquema do Redis (infra/redis/esquema.json) exige esse formato.
+    const userId = crypto.randomUUID();
     const parentalControl = !!userData.parentalControl;
     const closedCaptioning = !!userData.closedCaptioning;
     const closedSigning = !!userData.closedSigning;
