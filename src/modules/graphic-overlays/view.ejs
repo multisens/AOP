@@ -269,8 +269,10 @@
             // mesma origem impede disparar o evento direto no documento dela,
             // como antes. Vai por postMessage, so para a origem da aplicacao,
             // e a ponte do bcast (bcast/public/js/aop-bridge.js) o redespacha
-            // no document dela com o mesmo formato. Na mesma origem (caminho
-            // antigo /graphicsAppProxy), o disparo direto continua.
+            // no document dela com o mesmo formato. Se a aplicacao estiver na
+            // mesma origem, o disparo direto continua; desde 11/10 isso nao
+            // acontece pela camada grafica (o /graphicsAppProxy no host do AoP
+            // redireciona para o host da aplicacao).
             function graphics_event(name, init) {
                 const frame = document.getElementById('graphics');
                 if (!frame.getAttribute('src') || !frame.contentWindow) return;
