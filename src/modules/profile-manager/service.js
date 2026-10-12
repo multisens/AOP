@@ -11,7 +11,7 @@
 const crypto = require('crypto');
 const redis = require('../../redis-client');
 const funcoes = require('../../redis-funcoes');
-const { DEFAULT_AVATAR_SVG } = require('./avatar');
+const avatarFiles = require('./avatar');
 
 // P3: limite de cinco perfis, com despejo por ultimo acesso mais antigo.
 const MAX_PROFILES = 5;
@@ -128,6 +128,14 @@ async function evictLeastRecentlyUsed() {
     // decidido em 05/10. Mantido como estava.
     await funcoes.perfilRemove(oldest.id);
 
+    // G8 (decisao do Luis em 12/10): o arquivo do avatar que o gestor gravou
+    // para o perfil (<thumbs>/<id>.svg, ./avatar.js) sai depois do perfil. Se
+    // o Redis falhar acima, o perfil fica e o arquivo tambem. Falha ao apagar
+    // so vai para o log: o perfil ja saiu, e o arquivo orfao nao e entregue
+    // pela C.6.14.6 (o tv3ws so entrega o avatar de um perfil existente).
+    await avatarFiles.removeAvatarFile(oldest.id)
+        .catch(err => console.error(`[profiles] perfil ${oldest.id} despejado, mas o arquivo do avatar ficou: ${err.message}`));
+
     return oldest;
 }
 
@@ -159,10 +167,15 @@ async function createProfile(userData) {
         accessConsent.push(currentService);
     }
 
+    // G8 (decisao do Luis em 12/10): o avatar e o NOME do arquivo
+    // (<USER_DATA_PATH>/thumbs/<id>.svg, gravado abaixo, antes do perfil), e
+    // nao mais o SVG em linha. O SVG do formulario e conferido como as telas
+    // conferiam; ausente ou fora disso, grava-se o padrao (./avatar.js).
+    const avatarDoc = avatarFiles.avatarSvg(userData.avatar);
     const newUser = {
         id: userId,
         nickname,
-        avatar: userData.avatar || DEFAULT_AVATAR_SVG,
+        avatar: avatarFiles.avatarFileName(userId),
         parentalControl,
         maxContentRating: parentalControl ? userData.maxContentRating : null,
         audioLanguage: userData.audioLanguage || 'pt-BR',
@@ -182,9 +195,19 @@ async function createProfile(userData) {
     for (const [k, v] of Object.entries(newUser)) {
         if (v !== null && v !== undefined) hashFields[k] = String(v);
     }
+    // G8: o arquivo antes do perfil, para o avatar nunca nomear arquivo que
+    // nao existe. Falha ao gravar o arquivo sobe (404 {error:200}) sem gravar
+    // o perfil; falha ao gravar o perfil apaga o arquivo e sobe.
+    await avatarFiles.writeAvatarFile(userId, avatarDoc);
     // users:index + user:{id} (DEL + HSET) + user:{id}:consent numa funcao so,
     // que confere a Tabela 7 (P4; antes SADD, DEL, HSET e SADD avulsos)
-    await funcoes.perfilGrava(userId, accessConsent, hashFields);
+    try {
+        await funcoes.perfilGrava(userId, accessConsent, hashFields);
+    } catch (err) {
+        await avatarFiles.removeAvatarFile(userId)
+            .catch(e => console.error(`[profiles] perfil ${userId} nao gravado; o arquivo do avatar ficou: ${e.message}`));
+        throw err;
+    }
 
     return { user: { ...newUser, accessConsent }, evicted };
 }

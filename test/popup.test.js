@@ -302,3 +302,155 @@ test('QR code: o valor vai so para a biblioteca, como texto; o HTML do pop-up e 
     assert.deepEqual(p.qrcodes.map(q => q.text), [`"></div>${INJECAO}`]);
     assert.equal(p.el.html, '<span class="text">Escaneie o QR code abaixo com seu dispositivo.</span>\n<div id="qrcode"></div>');
 });
+
+// --- G9 (decisao do Luis em 12/10): aviso informativo (C.6.14.5) -------------------
+// O tv3ws publica em aop/display/layers/popup/info {"value": <texto>,
+// "timeout": 5000} depois de gravar atributos de emissora. O aviso nao pede
+// resposta, fecha no prazo e nao tira da tela um sim/nao, QR code ou PIN
+// aberto: espera numa fila curta (3) e aparece quando a camada fica livre.
+const INFO = 'aop/display/layers/popup/info';
+const aviso = (value, timeout = 5000) => JSON.stringify({ value, timeout });
+const AVISO = 'A emissora urn:tv30:service:users-test atualizou os dados do perfil Viewer 1.';
+
+test('aviso (info): texto na tela, fecha sozinho no prazo, sem botoes nem resposta', () => {
+    const p = page();
+    p.deliver(INFO, aviso(AVISO));
+    assert.equal(p.el.visible, true);
+    assert.equal(p.el.html, `<span class="text">${AVISO}</span>`);
+    assert.equal(p.state().popup_type, 'info');
+    assert.equal(p.state().yesno_popup, false, 'as teclas seguem para a pagina');
+    assert.ok(!vm.runInContext('window.PopupYes', p.ctx), 'sem botao Sim');
+    p.advance(4999);
+    assert.equal(p.el.visible, true);
+    p.advance(1);
+    assert.equal(p.el.visible, false);
+    assert.equal(p.state().has_popup, false);
+    assert.deepEqual(p.published, [], 'o aviso nao publica resposta');
+    assert.equal(p.timers.size, 0);
+});
+
+test('aviso (info): texto com HTML entra escapado', () => {
+    const p = page();
+    p.deliver(INFO, aviso(`A emissora <b>X</b> atualizou os dados do perfil ${INJECAO}.`));
+    assert.ok(p.el.html.includes(`&lt;b&gt;X&lt;/b&gt;`), p.el.html);
+    assert.ok(p.el.html.includes(INJECAO_ESCAPADA), p.el.html);
+    assert.ok(!p.el.html.includes('<img') && !p.el.html.includes('<b>'), p.el.html);
+});
+
+test('aviso (info): prazo ausente, zero, negativo ou que nao e numero vira 5 s; {"close":true} nao o fecha', () => {
+    for (const msg of ['{"value":"a"}', '{"value":"a","timeout":0}', '{"value":"a","timeout":-1}', '{"value":"a","timeout":"x"}', '{"value":"a","timeout":null}']) {
+        const p = page();
+        p.deliver(INFO, msg);
+        p.deliver(INFO, CLOSE);
+        p.advance(4999);
+        assert.equal(p.el.visible, true, msg);
+        p.advance(1);
+        assert.equal(p.el.visible, false, msg);
+    }
+    const p = page();
+    p.deliver(INFO, aviso('a', 12000));
+    p.advance(11999);
+    assert.equal(p.el.visible, true, 'prazo da mensagem respeitado');
+});
+
+test('aviso (info) com o sim/nao aberto: o sim/nao fica; o aviso aparece depois da resposta', () => {
+    const p = page();
+    p.deliver(YESNO, open('Autoriza?', 10000));
+    p.deliver(INFO, aviso(AVISO));
+    assert.equal(p.state().popup_type, 'yesno', 'o aviso nao tira o sim/nao da tela');
+    assert.equal(p.state().yesno_popup, true);
+    assert.match(p.el.html, /Autoriza\?/);
+    p.advance(6000);
+    assert.equal(p.state().popup_type, 'yesno');
+    vm.runInContext('window.PopupYes()', p.ctx);
+    assert.deepEqual(p.published, [['aop/display/layers/popup/yesno/response', 'true']]);
+    assert.equal(p.state().popup_type, 'info', 'camada livre: o aviso aparece');
+    assert.equal(p.el.html, `<span class="text">${AVISO}</span>`);
+    assert.equal(p.state().yesno_popup, false);
+    p.advance(5000);
+    assert.equal(p.el.visible, false);
+});
+
+test('aviso (info) com o sim/nao aberto: o prazo do sim/nao responde false e o aviso aparece', () => {
+    const p = page();
+    p.deliver(YESNO, open('Autoriza?', 10000));
+    p.deliver(INFO, aviso(AVISO));
+    p.advance(10000);
+    assert.deepEqual(p.published, [['aop/display/layers/popup/yesno/response', 'false']]);
+    assert.equal(p.state().popup_type, 'info');
+    p.advance(5000);
+    assert.equal(p.el.visible, false);
+});
+
+test('aviso (info) com o QR code ou o PIN aberto: espera o fechamento ou o prazo da trava', () => {
+    let p = page();
+    p.deliver(QR, open('chave'));
+    p.deliver(INFO, aviso(AVISO));
+    assert.equal(p.state().popup_type, 'qrcode');
+    assert.deepEqual(p.qrcodes.map(q => q.text), ['chave']);
+    p.deliver(QR, CLOSE);
+    assert.equal(p.state().popup_type, 'info');
+    p.advance(5000);
+    assert.equal(p.el.visible, false);
+
+    p = page();
+    p.deliver(PIN, open('0042'));
+    p.deliver(INFO, aviso(AVISO));
+    assert.equal(p.state().popup_type, 'pin');
+    p.advance(PRAZO);
+    assert.equal(p.state().popup_type, 'info', 'trava do PIN fechou: o aviso aparece');
+    assert.match(p.el.html, /atualizou os dados do perfil/);
+});
+
+test('aviso (info) com outro aviso na tela: espera o prazo do primeiro', () => {
+    const p = page();
+    p.deliver(INFO, aviso('primeiro'));
+    p.deliver(INFO, aviso('segundo'));
+    assert.equal(p.el.html, '<span class="text">primeiro</span>');
+    p.advance(5000);
+    assert.equal(p.el.html, '<span class="text">segundo</span>');
+    p.advance(5000);
+    assert.equal(p.el.visible, false);
+});
+
+test('aviso (info): fila de 3; o excedente e descartado e logado', () => {
+    const p = page();
+    p.deliver(YESNO, open('Autoriza?', 60000));
+    for (let i = 1; i <= 5; i++) p.deliver(INFO, aviso(`aviso ${i}`));
+    assert.equal(p.state().popup_type, 'yesno');
+    const descartes = p.warnings.filter(w => /aviso descartado \(fila cheia/.test(w));
+    assert.equal(descartes.length, 2, p.warnings.join(' | '));
+    assert.ok(descartes[0].includes('aviso 4') && descartes[1].includes('aviso 5'));
+    vm.runInContext('window.PopupNo()', p.ctx);
+    const shown = [];
+    for (let i = 0; i < 5 && p.state().has_popup; i++) {
+        shown.push(p.el.html);
+        p.advance(5000);
+    }
+    assert.deepEqual(shown, [1, 2, 3].map(i => `<span class="text">aviso ${i}</span>`));
+    assert.equal(p.el.visible, false);
+});
+
+test('aviso (info) na tela substituido pelo sim/nao, QR code ou PIN: volta para a fila e aparece inteiro depois', () => {
+    const p = page();
+    p.deliver(INFO, aviso(AVISO));
+    p.advance(2000);
+    p.deliver(YESNO, open('Autoriza?', 10000));
+    assert.equal(p.state().popup_type, 'yesno', 'G2: o novo substitui o da tela');
+    p.advance(5000);
+    assert.equal(p.state().popup_type, 'yesno', 'o prazo do aviso substituido nao fecha o sim/nao');
+    vm.runInContext('window.PopupYes()', p.ctx);
+    assert.equal(p.state().popup_type, 'info');
+    assert.equal(p.el.html, `<span class="text">${AVISO}</span>`);
+    p.advance(4999);
+    assert.equal(p.el.visible, true, 'o aviso volta com o prazo inteiro');
+    p.advance(1);
+    assert.equal(p.el.visible, false);
+
+    // o QR code tambem substitui; o aviso volta no fechamento
+    p.deliver(INFO, aviso('outro'));
+    p.deliver(QR, open('chave'));
+    assert.equal(p.state().popup_type, 'qrcode');
+    p.deliver(QR, CLOSE);
+    assert.equal(p.el.html, '<span class="text">outro</span>');
+});

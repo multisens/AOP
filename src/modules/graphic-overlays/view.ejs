@@ -257,7 +257,10 @@
                 else if (t.startsWith('popup') ) {
                     // abertura e, desde 12/10, fechamento ({"close":true} no
                     // topico do QR code ou do PIN, no fim do pareamento),
-                    // com a mensagem conferida antes: /js/popup.js
+                    // com a mensagem conferida antes: /js/popup.js. O aviso
+                    // da C.6.14.5 (popup/info, G9, decisao do Luis em 12/10)
+                    // chega pela assinatura de popup/+ e espera a camada
+                    // ficar livre (popup.js)
                     handlePopupMessage(t.split('/')[1], message.toString());
                 }
             }

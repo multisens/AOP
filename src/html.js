@@ -10,7 +10,8 @@
 // - texto e valor de atributo (entre aspas duplas): escapeHtml;
 // - imagem SVG (appIcon e bannerIcon do BAM, Tabela 6, p. 54; p. 72 do PDF:
 //   "Secure static mode SVG image, as defined in W3C Candidate Recommendation
-//   SVG 2"; e o avatar, que o testbed grava como SVG em linha): vai como
+//   SVG 2"; e o avatar, desde a decisao do Luis em 12/10 (G8) lido do arquivo
+//   que o campo avatar nomeia, profile-manager/avatar.js): vai como
 //   <img src="data:image/svg+xml;base64,...">. Num <img> o navegador nao roda
 //   script do SVG nem carrega recurso externo (modo seguro do SVG 2); o SVG
 //   em linha no HTML rodava os dois.
@@ -20,17 +21,18 @@ function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
-// Texto com SVG -> URL data: de imagem; '' se nao houver elemento <svg>.
-// Como documento image/svg+xml, o elemento raiz precisa do namespace do SVG,
-// que o SVG em linha no HTML dispensa; tres das quatro amostras do bcast
+// Texto com SVG -> documento SVG (image/svg+xml); '' se nao houver elemento
+// <svg>. Como documento image/svg+xml, o elemento raiz precisa do namespace do
+// SVG, que o SVG em linha no HTML dispensa; tres das quatro amostras do bcast
 // (uff, webmedia, eduplay) vem sem ele. Sem xmlns no <svg>, ele e acrescentado
 // para que esses icones continuem aparecendo. O resto do texto nao muda (SVG
 // que nao seja XML bem formado deixa de aparecer: no HTML o analisador
-// tolerava).
+// tolerava). Desde a decisao do Luis em 12/10 (G8), e tambem o conteudo do
+// arquivo do avatar que o gestor de perfis grava (profile-manager/avatar.js).
 // PENDENTE (Joel): acrescentar o xmlns e tolerancia com SVG fora de
 // image/svg+xml (as amostras do bcast); corrigir as amostras no bcast
 // dispensaria.
-function svgDataUri(svg) {
+function svgDocument(svg) {
     if (typeof svg !== 'string') return '';
     let doc = svg.trim();
     const root = /<svg(?=[\s/>])[^>]*>/.exec(doc);
@@ -38,15 +40,25 @@ function svgDataUri(svg) {
     if (!/\sxmlns\s*=/.test(root[0])) {
         doc = `${doc.slice(0, root.index)}<svg xmlns="${SVG_NS}"${doc.slice(root.index + 4)}`;
     }
-    return `data:image/svg+xml;base64,${Buffer.from(doc, 'utf8').toString('base64')}`;
+    return doc;
+}
+
+// Texto com SVG -> URL data: de imagem; '' se nao houver elemento <svg>
+function svgDataUri(svg) {
+    const doc = svgDocument(svg);
+    return doc ? `data:image/svg+xml;base64,${Buffer.from(doc, 'utf8').toString('base64')}` : '';
+}
+
+// <img> com a URL dada, com atributos extras escapados; '' sem URL
+function imageHtml(src, attrs = {}) {
+    if (!src) return '';
+    const extra = Object.entries(attrs).map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join('');
+    return `<img src="${escapeHtml(src)}"${extra}>`;
 }
 
 // <img> do SVG, com atributos extras escapados; '' sem SVG
 function svgImageHtml(svg, attrs = {}) {
-    const src = svgDataUri(svg);
-    if (!src) return '';
-    const extra = Object.entries(attrs).map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join('');
-    return `<img src="${src}"${extra}>`;
+    return imageHtml(svgDataUri(svg), attrs);
 }
 
 // Cor que vai para dentro de <style> (correcao de 12/10, spec-1210-defeitos3,
@@ -59,4 +71,4 @@ function cssHexColor(value, fallback, { alpha = false } = {}) {
     return typeof value === 'string' && re.test(value) ? value : fallback;
 }
 
-module.exports = { escapeHtml, svgDataUri, svgImageHtml, cssHexColor, SVG_NS };
+module.exports = { escapeHtml, svgDocument, svgDataUri, imageHtml, svgImageHtml, cssHexColor, SVG_NS };

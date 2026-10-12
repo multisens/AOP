@@ -28,9 +28,18 @@ const HOSTILE = {
 };
 const SAMPLE = { globalServiceId: 'urn:amostra:uff', appName: 'UFF TV', appIcon: SAMPLE_ICON, appDescription: 'A TV', backgroundColor: '#282828', foregroundColor: '#c8c8c8' };
 const HOSTILE_AVATAR = `<svg xmlns="${SVG_NS}" viewBox="0 0 100 100" onload="${INJ('avatar')}"><script>${INJ('avatar-script')}</script></svg>`;
+// G8 (decisao do Luis em 12/10): o campo avatar e o nome de um arquivo de
+// <USER_DATA_PATH>/thumbs; o SVG hostil mora no arquivo hostil.svg
+const fs = require('fs');
+const os = require('os');
+const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'aop-views-'));
+process.env.USER_DATA_PATH = USER_DATA;
+const THUMBS = path.join(USER_DATA, 'thumbs');
+fs.mkdirSync(THUMBS);
+fs.writeFileSync(path.join(THUMBS, 'hostil.svg'), HOSTILE_AVATAR);
 const users = [
     { id: '0b6f3e2a-7c1d-4e5f-9a8b-2c3d4e5f6a7b', name: 'Maria', avatar: null },
-    { id: '9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d', name: '<svg/onload=alert()>', avatar: HOSTILE_AVATAR },
+    { id: '9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d', name: '<svg/onload=alert()>', avatar: 'hostil.svg' },
     // o esquema do Redis exige UUID no id (infra/redis/esquema.json); o
     // escape no atributo e defesa a mais
     { id: `x" onfocus="${INJ('id')}`, name: 'Id hostil', avatar: null },
@@ -64,6 +73,7 @@ before(async () => {
     base = `http://127.0.0.1:${server.address().port}`;
 });
 after(() => new Promise(r => server.close(r)));
+after(() => fs.rmSync(USER_DATA, { recursive: true, force: true }));
 
 const page = async route => {
     const res = await fetch(`${base}${route}`);
@@ -153,12 +163,59 @@ test('escolha de perfil (/prfchs): nickname e id escapados; avatares como <img> 
     assert.ok(srcs.includes(DEFAULT_AVATAR_SVG), 'perfil sem avatar: o padrao, em <img>');
 });
 
-test('avatarHtml: SVG gravado ou o padrao, sempre em <img class="avatar">; texto que nao e SVG cai no padrao', () => {
-    const { avatarHtml, DEFAULT_AVATAR_SVG, AVATAR_COLORS } = require('../src/modules/profile-manager/avatar');
-    const only = html => { const s = imgSources(html); assert.equal(s.length, 1, html); assert.match(html, / class="avatar"/); return decode(s[0]); };
-    assert.equal(only(avatarHtml(AVATAR_COLORS[2].svg)), AVATAR_COLORS[2].svg);
-    assert.equal(only(avatarHtml(HOSTILE_AVATAR)), HOSTILE_AVATAR);
-    for (const v of [null, undefined, '', 'a.png', '<img src=x onerror=alert(1)>']) assert.equal(only(avatarHtml(v)), DEFAULT_AVATAR_SVG, String(v));
+// G8 (decisao do Luis em 12/10): avatarHtml le o arquivo nomeado no campo
+// (<USER_DATA_PATH>/thumbs/<nome>) e o embute em <img src=data:> com o tipo
+// pela extensao; sem arquivo ou fora do formato do contrato, o padrao. O SVG
+// em linha no campo (perfis de antes) esta fora do formato.
+test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">; SVG em linha e nome fora do formato caem no padrao', () => {
+    const { avatarHtml, DEFAULT_AVATAR_SVG, AVATAR_COLORS, MAX_AVATAR_BYTES } = require('../src/modules/profile-manager/avatar');
+    const only = html => {
+        const s = [...html.matchAll(/<img src="(data:[^"]+)"/g)].map(x => x[1]);
+        assert.equal(s.length, 1, html);
+        assert.match(html, / class="avatar"/);
+        return s[0];
+    };
+    const svgOf = html => decode(only(html));
+    const put = (name, data) => fs.writeFileSync(path.join(THUMBS, name), data);
+
+    put('cor.svg', AVATAR_COLORS[2].svg);
+    assert.equal(svgOf(avatarHtml('cor.svg')), AVATAR_COLORS[2].svg);
+    assert.equal(svgOf(avatarHtml('hostil.svg')), HOSTILE_AVATAR);
+    // SVG sem xmlns no arquivo: o namespace e acrescentado (como o icone do BAM)
+    put('sem-ns.svg', '<svg viewBox="0 0 1 1"/>');
+    assert.equal(svgOf(avatarHtml('sem-ns.svg')), `<svg xmlns="${SVG_NS}" viewBox="0 0 1 1"/>`);
+    // outras extensoes do contrato: tipo pela extensao, bytes intactos
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff, 0x10]);
+    for (const [name, mime] of [['p.png', 'image/png'], ['j.jpg', 'image/jpeg'], ['k.jpeg', 'image/jpeg'], ['w.webp', 'image/webp']]) {
+        put(name, bytes);
+        assert.equal(only(avatarHtml(name)), `data:${mime};base64,${bytes.toString('base64')}`, name);
+    }
+
+    // o padrao: ausente, SVG em linha (antes de G8), nome fora do formato,
+    // arquivo inexistente, SVG sem <svg>, diretorio, acima do teto
+    put('vazio.svg', 'nao e svg');
+    put('grande.svg', `<svg xmlns="${SVG_NS}">${' '.repeat(MAX_AVATAR_BYTES)}</svg>`);
+    fs.mkdirSync(path.join(THUMBS, 'pasta.svg'));
+    fs.writeFileSync(path.join(USER_DATA, 'fora.svg'), AVATAR_COLORS[4].svg);
+    put('x.gif', 'GIF');
+    put('.oculto.svg', AVATAR_COLORS[5].svg);
+    // ...sem linha de erro no log: nenhum destes e falha da plataforma
+    const logs = [];
+    const errorOrig = console.error;
+    console.error = (...a) => logs.push(a.join(' '));
+    try {
+        for (const v of [null, undefined, '', 42, AVATAR_COLORS[2].svg, HOSTILE_AVATAR, '<img src=x onerror=alert(1)>',
+            'nao-existe.svg', 'vazio.svg', 'grande.svg', 'pasta.svg', '../fora.svg', 'thumbs/../fora.svg', '/cor.svg', 'sub/cor.svg',
+            '..\\fora.svg', 'x.gif', '.oculto.svg', 'cor.SVG', 'cor.svg ', `${'a'.repeat(129)}.svg`]) {
+            assert.equal(svgOf(avatarHtml(v)), DEFAULT_AVATAR_SVG, JSON.stringify(v));
+        }
+    } finally { console.error = errorOrig; }
+    assert.deepEqual(logs, []);
+    // link simbolico para fora do diretorio: o padrao (no Windows sem
+    // privilegio de link, a criacao falha e o caso nao roda)
+    let linked = false;
+    try { fs.symlinkSync(path.join(USER_DATA, 'fora.svg'), path.join(THUMBS, 'link.svg')); linked = true; } catch { /* sem privilegio */ }
+    if (linked) assert.equal(svgOf(avatarHtml('link.svg')), DEFAULT_AVATAR_SVG, 'link para fora');
 });
 
 // --- 12/10 (spec-1210-defeitos3, itens 4 e 5) -----------------------------------
