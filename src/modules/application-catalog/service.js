@@ -1,6 +1,11 @@
 const core = require('../../core');
 // Avatar padrao: fonte unica no gestor de perfis (M1)
 const { avatarHtml } = require('../profile-manager/avatar');
+// escape e icone SVG como imagem (correcao de 12/10, spec-1210-seguranca2,
+// item 2; ver ../../html.js): appName, appIcon e globalServiceId vem do BAM
+// da emissora (MQTT) e o nickname do perfil vem do POST /profile/create; antes
+// iam crus para o HTML, que a view exibe com <%- %>
+const { escapeHtml, svgImageHtml } = require('../../html');
 
 
 function cards() {
@@ -25,9 +30,9 @@ function cards() {
 			move += ` movedown="app${i + cards_in_line}"`;
 		}
 
-		html += `<div id="card${i}" class="card" ${move} select="selectService" selectParam="${lls.bam.globalServiceId}">` +
-					`<span>${lls.bam.appName}</span>` +
-					`<div class="logo">${lls.bam.appIcon}</div>` +
+		html += `<div id="card${i}" class="card" ${move} select="selectService" selectParam="${escapeHtml(lls.bam.globalServiceId)}">` +
+					`<span>${escapeHtml(lls.bam.appName)}</span>` +
+					`<div class="logo">${svgImageHtml(lls.bam.appIcon, { alt: '' })}</div>` +
 				`</div>`;
 		i++;
 	});
@@ -38,7 +43,7 @@ function cards() {
 
 function profile() {
 	var usr = core.getUserData(core.getCurrentUser());
-	var html = `<span>${usr.name || ''}</span>${avatarHtml(usr.avatar)}`;
+	var html = `<span>${escapeHtml(usr.name || '')}</span>${avatarHtml(usr.avatar)}`;
 	return html;
 }
 

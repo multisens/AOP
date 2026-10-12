@@ -75,6 +75,15 @@
                     height: 90%;
                     margin-right: 0.3vw;
                 }
+
+                /* avatar: <img> com o SVG em URL data: desde 12/10
+                   (spec-1210-seguranca2 item 2; src/html.js), com a mesma
+                   caixa do SVG em linha de antes */
+                img.avatar {
+                    width: 100%;
+                    height: auto;
+                    margin-right: 0;
+                }
             }
 
             #search {
@@ -159,7 +168,10 @@
                         height: 100%;
                         overflow: hidden;
                     }
-                    svg {
+                    /* icone do BAM: <img> com o SVG em URL data: desde 12/10
+                       (spec-1210-seguranca2 item 2; src/html.js); svg fica
+                       para o caso de SVG em linha */
+                    svg, img {
                         max-width: 80%;
                         max-height: 80%;
                         width: auto;
@@ -230,8 +242,11 @@
                 fetch('<%= basepath %>/profile');
             }
 
+            // id codificado na query (12/10, spec-1210-defeitos3 item 5): o
+            // globalServiceId vem do BAM da emissora, e "&", "#", "+" ou "%"
+            // nele cortavam ou trocavam o id que chega ao /select
             function selectService(sid) {
-                fetch(`<%= basepath %>/select?id=${sid}`);
+                fetch(`<%= basepath %>/select?id=${encodeURIComponent(sid)}`);
             }
         </script>
   </body>

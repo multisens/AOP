@@ -1,0 +1,261 @@
+// Injecao de HTML nas telas do AoP fora dos pop-ups (correcao de 12/10,
+// spec-1210-seguranca2, item 2): catalogo de aplicacoes, aplicacao de
+// abertura e escolha de perfil, pelos routers e views REAIS, com o core do
+// AoP trocado por um duble (sem MQTT nem Redis). Antes, appName, appIcon e
+// globalServiceId do BAM (emissora, MQTT) e nickname e avatar do perfil (POST
+// /profile/create) iam crus para o HTML exibido com <%- %>: o script deles
+// rodava na tela da TV (medido no Chrome 154,
+// scratchpad/seguranca2-1210/chrome-views.js). Agora: texto e atributo
+// escapados; SVG (appIcon, avatar) como <img> com URL data:, onde o
+// navegador nao roda script.
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('path');
+const Module = require('module');
+const express = require('express');
+
+const { escapeHtml, svgDataUri, svgImageHtml, SVG_NS } = require('../src/html');
+
+// --- dados -----------------------------------------------------------------------
+const INJ = tag => `window.__injetado=(window.__injetado||[]).concat('${tag}')`;
+// amostra sem xmlns, como tres das quatro do bcast (uff, webmedia, eduplay)
+const SAMPLE_ICON = '<svg viewBox="0 0 180 95" style="fill:#003461" preserveAspectRatio="xMidYMid meet"><path d="M0 0h10v10z"/></svg>';
+const HOSTILE = {
+    globalServiceId: `urn:hostil" onfocus="${INJ('gsid')}" autofocus tabindex="1`,
+    appName: `<img src=x onerror="${INJ('appName')}">`,
+    appIcon: `<svg xmlns="${SVG_NS}" viewBox="0 0 10 10" onload="${INJ('icon')}"><script>${INJ('icon-script')}</script></svg>`,
+    appDescription: '<b>desc</b>', backgroundColor: '#202020', foregroundColor: '#e0e0e0',
+};
+const SAMPLE = { globalServiceId: 'urn:amostra:uff', appName: 'UFF TV', appIcon: SAMPLE_ICON, appDescription: 'A TV', backgroundColor: '#282828', foregroundColor: '#c8c8c8' };
+const HOSTILE_AVATAR = `<svg xmlns="${SVG_NS}" viewBox="0 0 100 100" onload="${INJ('avatar')}"><script>${INJ('avatar-script')}</script></svg>`;
+const users = [
+    { id: '0b6f3e2a-7c1d-4e5f-9a8b-2c3d4e5f6a7b', name: 'Maria', avatar: null },
+    { id: '9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d', name: '<svg/onload=alert()>', avatar: HOSTILE_AVATAR },
+    // o esquema do Redis exige UUID no id (infra/redis/esquema.json); o
+    // escape no atributo e defesa a mais
+    { id: `x" onfocus="${INJ('id')}`, name: 'Id hostil', avatar: null },
+];
+const services = new Map([[SAMPLE.globalServiceId, { bam: SAMPLE }], [HOSTILE.globalServiceId, { bam: HOSTILE }]]);
+let currentService = HOSTILE.globalServiceId;
+
+// --- duble do core -------------------------------------------------------------------
+const coreFile = require.resolve('../src/core');
+const fakeCore = {
+    GUI: { app_catalogue: '/appcat', profile_chooser: '/prfchs', profile_creator: '/profile/create', bootstrap_app: '/btpapp' },
+    getServiceList: () => services,
+    getUserData: uid => users.find(u => u.id == uid) || {},
+    getCurrentUser: () => users[1].id,
+    getUserList: () => users,
+    getCurrentService: () => services.get(currentService),
+    getServiceSLS: () => ({}),
+    unsetCurrentService() {}, setVideoURL() {}, setVideoSize() {}, setDisplayGui() {},
+    async refreshUserData() {},
+};
+const m = new Module(coreFile); m.filename = coreFile; m.loaded = true; m.exports = fakeCore; require.cache[coreFile] = m;
+
+let server;
+let base = '';
+before(async () => {
+    const app = express();
+    app.use('/appcat', require('../src/modules/application-catalog'));
+    app.use('/btpapp', require('../src/modules/bootstrap-application'));
+    app.use('/prfchs', require('../src/modules/profile-manager/chooser'));
+    server = await new Promise(r => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+    base = `http://127.0.0.1:${server.address().port}`;
+});
+after(() => new Promise(r => server.close(r)));
+
+const page = async route => {
+    const res = await fetch(`${base}${route}`);
+    assert.equal(res.status, 200, route);
+    return res.text();
+};
+// o que sobra do HTML sem as URLs data: (o SVG codificado nao e HTML da pagina)
+const withoutDataUris = html => html.replace(/data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+/g, 'data:...');
+// marcas de HTML injetado: so podem aparecer escapadas
+function assertNoInjection(html, where) {
+    const h = withoutDataUris(html);
+    assert.doesNotMatch(h, /\son(load|error|focus)\s*=\s*"/, `${where}: atributo de evento cru`);
+    assert.doesNotMatch(h, /<img src=x/, `${where}: <img> do appName cru`);
+    assert.doesNotMatch(h, /<script>window\.__injetado/, `${where}: <script> do SVG cru`);
+    assert.doesNotMatch(h, /<svg[^>]*\sonload/, `${where}: SVG hostil em linha`);
+    assert.doesNotMatch(h, /<svg\/onload/, `${where}: nickname hostil cru`);
+}
+const decode = uri => Buffer.from(uri.replace('data:image/svg+xml;base64,', ''), 'base64').toString('utf8');
+const imgSources = html => [...html.matchAll(/<img src="(data:image\/svg\+xml;base64,[^"]+)"/g)].map(x => x[1]);
+
+// --- src/html.js -------------------------------------------------------------------
+test('escapeHtml: & < > " \' escapados; nulo vira vazio', () => {
+    assert.equal(escapeHtml(`<a href="x" title='y'>&</a>`), '&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;');
+    assert.equal(escapeHtml(undefined), '');
+    assert.equal(escapeHtml(null), '');
+    assert.equal(escapeHtml(42), '42');
+});
+
+test('svgDataUri: SVG vira URL data: de imagem; xmlns acrescentado so quando falta; sem <svg>, vazio', () => {
+    assert.equal(decode(svgDataUri(SAMPLE_ICON)), SAMPLE_ICON.replace('<svg ', `<svg xmlns="${SVG_NS}" `));
+    const withNs = `<svg xmlns="${SVG_NS}" viewBox="0 0 1 1"/>`;
+    assert.equal(decode(svgDataUri(withNs)), withNs);
+    // xmlns:xlink nao e o namespace padrao
+    const xlink = '<svg xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1 1"/>';
+    assert.equal(decode(svgDataUri(xlink)), `<svg xmlns="${SVG_NS}" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1 1"/>`);
+    // prologo XML e espacos em volta
+    assert.equal(decode(svgDataUri('  <?xml version="1.0"?><svg>x</svg> ')), `<?xml version="1.0"?><svg xmlns="${SVG_NS}">x</svg>`);
+    for (const v of [undefined, null, 42, '', 'http://x/icone.svg', 'javascript:alert(1)', '<svgx>', '<img src=x>']) {
+        assert.equal(svgDataUri(v), '', String(v));
+    }
+});
+
+test('svgImageHtml: <img> com a URL data: e atributos escapados; sem SVG, nada', () => {
+    const html = svgImageHtml(SAMPLE_ICON, { alt: '"><script>', class: 'avatar' });
+    assert.match(html, /^<img src="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+" alt="&quot;&gt;&lt;script&gt;" class="avatar">$/);
+    assert.equal(svgImageHtml('nao e svg'), '');
+});
+
+// --- telas ----------------------------------------------------------------------------
+test('catalogo (/appcat): appName, globalServiceId e nickname hostis escapados; icones como <img> data:', async () => {
+    const html = await page('/appcat');
+    assertNoInjection(html, 'catalogo');
+    assert.ok(html.includes(`<span>${escapeHtml(HOSTILE.appName)}</span>`), 'appName escapado');
+    assert.ok(html.includes(`selectParam="${escapeHtml(HOSTILE.globalServiceId)}"`), 'globalServiceId escapado no atributo');
+    assert.ok(html.includes(`<span>${escapeHtml(users[1].name)}</span>`), 'nickname escapado');
+    const srcs = imgSources(html).map(decode);
+    // icones das duas aplicacoes e o avatar
+    assert.ok(srcs.includes(SAMPLE_ICON.replace('<svg ', `<svg xmlns="${SVG_NS}" `)), 'icone da amostra, com xmlns');
+    assert.ok(srcs.includes(HOSTILE.appIcon), 'icone hostil so dentro do <img>');
+    assert.ok(srcs.includes(HOSTILE_AVATAR), 'avatar hostil so dentro do <img>');
+    assert.ok(html.includes('<span>UFF TV</span>'), 'nome comum sem mudanca');
+});
+
+test('aplicacao de abertura (/btpapp): icone como <img> data:, nickname escapado; amostra e hostil', async () => {
+    for (const sid of [SAMPLE.globalServiceId, HOSTILE.globalServiceId]) {
+        currentService = sid;
+        const html = await page('/btpapp');
+        assertNoInjection(html, `abertura ${sid}`);
+        const bam = services.get(sid).bam;
+        assert.match(html, /<div class="icon">\s*<img src="data:image\/svg\+xml;base64,/, `${sid}: icone em <img>`);
+        assert.ok(imgSources(html).map(decode).some(s => s.includes('viewBox="0 0 ' + (bam === SAMPLE ? '180 95' : '10 10'))));
+        // <%= %> do EJS escreve " como &#34;
+        assert.ok(html.replace(/&#34;/g, '&quot;').includes(`<span class="name">${escapeHtml(bam.appName)}</span>`), `${sid}: appName escapado (<%= %>)`);
+        assert.ok(html.includes(`<span>${escapeHtml(users[1].name)}</span>`), `${sid}: nickname escapado`);
+    }
+});
+
+test('escolha de perfil (/prfchs): nickname e id escapados; avatares como <img> data:, o padrao inclusive', async () => {
+    const html = await page('/prfchs');
+    assertNoInjection(html, 'perfis');
+    assert.ok(html.includes(`<span>${escapeHtml(users[1].name)}</span>`), 'nickname escapado');
+    assert.ok(html.includes('<span>Maria</span>'));
+    assert.ok(html.includes(`selectParam="${escapeHtml(users[2].id)}"`), 'id escapado no atributo');
+    const srcs = imgSources(html).map(decode);
+    const { DEFAULT_AVATAR_SVG } = require('../src/modules/profile-manager/avatar');
+    assert.ok(srcs.includes(HOSTILE_AVATAR), 'avatar hostil so dentro do <img>');
+    assert.ok(srcs.includes(DEFAULT_AVATAR_SVG), 'perfil sem avatar: o padrao, em <img>');
+});
+
+test('avatarHtml: SVG gravado ou o padrao, sempre em <img class="avatar">; texto que nao e SVG cai no padrao', () => {
+    const { avatarHtml, DEFAULT_AVATAR_SVG, AVATAR_COLORS } = require('../src/modules/profile-manager/avatar');
+    const only = html => { const s = imgSources(html); assert.equal(s.length, 1, html); assert.match(html, / class="avatar"/); return decode(s[0]); };
+    assert.equal(only(avatarHtml(AVATAR_COLORS[2].svg)), AVATAR_COLORS[2].svg);
+    assert.equal(only(avatarHtml(HOSTILE_AVATAR)), HOSTILE_AVATAR);
+    for (const v of [null, undefined, '', 'a.png', '<img src=x onerror=alert(1)>']) assert.equal(only(avatarHtml(v)), DEFAULT_AVATAR_SVG, String(v));
+});
+
+// --- 12/10 (spec-1210-defeitos3, itens 4 e 5) -----------------------------------
+// Item 4: backgroundColor/foregroundColor do BAM e a cor do genero do ESG iam
+// para o <style> da aplicacao de abertura so com o escape de HTML do <%= %>,
+// que nao impede CSS ("red; } body { ... }" reescrevia a tela). Agora: BAM so
+// #RRGGBB (Tabela 6), genero #RRGGBB ou #RRGGBBAA (o que o bcast publica);
+// fora disso, o padrao da view.
+// Item 5: selectService/selectProfile montavam ?id= sem encodeURIComponent: um
+// globalServiceId com "&", "#", "+" ou "%" chegava cortado ou trocado.
+const { cssHexColor } = require('../src/html');
+const vm = require('vm');
+
+test('cssHexColor: so "#" e 6 hexadecimais (8 com alpha); o resto vira o fallback', () => {
+    for (const v of ['#00FFFF', '#00ffff', '#282828', '#AbCdEf']) assert.equal(cssHexColor(v, 'P'), v, v);
+    const bad = ['#00FFFF80', '#0FF', '00FFFF', '#00FFFG', ' #00FFFF', '#00FFFF ', '#00FFFF;', '#00FFFF\n', 'red', 'rgb(0,0,0)',
+        '#00FFFF; } body { color: red', 'transparent', '', null, undefined, 42, ['#00FFFF']];
+    for (const v of bad) assert.equal(cssHexColor(v, 'P'), 'P', JSON.stringify(v));
+    assert.equal(cssHexColor('#07812cff', 'P', { alpha: true }), '#07812cff');
+    assert.equal(cssHexColor('#07812c', 'P', { alpha: true }), '#07812c');
+    for (const v of ['#07812cf', '#07812cfff', '#0f0f', '#0F0', 'transparent', '#07812cff; } x {', '#07812cff\n']) {
+        assert.equal(cssHexColor(v, 'P', { alpha: true }), 'P', JSON.stringify(v));
+    }
+});
+
+// as tres variaveis de cor do <style> da aplicacao de abertura
+function styleVars(html) {
+    const style = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+    const get = n => (new RegExp(`--${n}:[ \\t]*([^;]*);`).exec(style) || [])[1];
+    return { style, bg: get('background-color'), fg: get('foreground-color'), genre: get('genre-color') };
+}
+
+test('aplicacao de abertura (/btpapp): cor do BAM ou do genero fora do formato nao entra no <style> (padrao da view); no formato, entra', async () => {
+    const INJ_CSS = 'red; } body { background: url(http://atacante.invalid/x.png) } :root { --x: 1';
+    const INJ_CSS2 = '#fff; } * { display: none } :root { --y: 1';
+    const esgWith = color => ({ esg: { Service: { validFrom: 'a', validTo: 'b', Name: { text: 'N' }, Description: { text: 'D' },
+        Genre: { term: 'T', color }, ContentAdvisoryRatings: 'Livre' } } });
+    const slsOrig = fakeCore.getServiceSLS;
+    const currentOrig = currentService;
+    const cases = [
+        // [backgroundColor, foregroundColor, cor do genero] -> [fundo, texto, genero]
+        [[INJ_CSS, INJ_CSS2, INJ_CSS], ['#282828', '#c8c8c8', 'transparent']],
+        [['#0FF', '00FFFF', 'blue'], ['#282828', '#c8c8c8', 'transparent']],
+        [['#00FFFF80', '#00FFFF;', '#07812cff; } x {'], ['#282828', '#c8c8c8', 'transparent']],
+        [[undefined, null, undefined], ['#282828', '#c8c8c8', 'transparent']],
+        [['#00FFFF', '#1a1a2e', '#07812cff'], ['#00FFFF', '#1a1a2e', '#07812cff']],
+        [['#282828', '#c8c8c8', '#ed6f6f'], ['#282828', '#c8c8c8', '#ed6f6f']],
+    ];
+    try {
+        for (const [[bg, fg, genre], expected] of cases) {
+            services.set('urn:cores', { bam: { ...SAMPLE, globalServiceId: 'urn:cores', backgroundColor: bg, foregroundColor: fg } });
+            currentService = 'urn:cores';
+            fakeCore.getServiceSLS = () => esgWith(genre);
+            const v = styleVars(await page('/btpapp'));
+            const what = JSON.stringify([bg, fg, genre]);
+            assert.deepEqual([v.bg, v.fg, v.genre], expected, what);
+            assert.ok(!/atacante|display: none|--x:|--y:/.test(v.style), `CSS injetado no <style>: ${what}`);
+        }
+        // sem ESG: genero transparente (antes, vazio: tambem sem cor)
+        fakeCore.getServiceSLS = () => ({});
+        assert.equal(styleVars(await page('/btpapp')).genre, 'transparent');
+    } finally {
+        fakeCore.getServiceSLS = slsOrig;
+        services.delete('urn:cores');
+        currentService = currentOrig;
+    }
+});
+
+// roda os <script> em linha da pagina com um fetch de mentira e chama a funcao
+// de selecao; devolve as URLs pedidas
+function selectUrls(html, fn, arg) {
+    const urls = [];
+    const ctx = vm.createContext({ fetch: u => { urls.push(u); return Promise.resolve(); }, document: { addEventListener() {} }, navigate() {} });
+    for (const [, src] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) vm.runInContext(src, ctx);
+    vm.runInContext(`${fn}(${JSON.stringify(arg)})`, ctx);
+    return urls;
+}
+
+test('selectService e selectProfile: o id vai codificado na query e chega inteiro ao /select', async () => {
+    const ids = ['urn:a&id=urn:b', 'urn:tv3#x', 'urn:a+b c', 'urn:100%', 'urn:x?y=1/z', 'urn:ç', '0b6f3e2a-7c1d-4e5f-9a8b-2c3d4e5f6a7b'];
+    const got = [];
+    fakeCore.setCurrentService = id => { got.push(id); };
+    fakeCore.setCurrentUser = async id => { got.push(id); };
+    try {
+        for (const [route, fn] of [['/appcat', 'selectService'], ['/prfchs', 'selectProfile']]) {
+            const html = await page(route);
+            for (const id of ids) {
+                const urls = selectUrls(html, fn, id);
+                assert.deepEqual(urls, [`${route}/select?id=${encodeURIComponent(id)}`], `${fn}(${id})`);
+                got.length = 0;
+                const res = await fetch(`${base}${urls[0]}`);
+                assert.equal(res.status, 200, `${route}/select ${id}`);
+                assert.deepEqual(got, [id], `${fn}(${id}): id recebido pelo core`);
+            }
+        }
+    } finally {
+        delete fakeCore.setCurrentService;
+        delete fakeCore.setCurrentUser;
+    }
+});

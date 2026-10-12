@@ -112,8 +112,9 @@
                 fetch('<%= basepath %>/create');
             }
 
+            // id codificado na query (12/10, spec-1210-defeitos3 item 5)
             function selectProfile(uid) {
-                fetch(`<%= basepath %>/select?id=${uid}`);
+                fetch(`<%= basepath %>/select?id=${encodeURIComponent(uid)}`);
             }
         </script>
   </body>

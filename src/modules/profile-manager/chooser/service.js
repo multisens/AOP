@@ -2,6 +2,11 @@ require('dotenv').config();
 const core = require('../../../core');
 // Avatar padrao: fonte unica no gestor de perfis (M1)
 const { avatarHtml } = require('../avatar');
+// escape (correcao de 12/10, spec-1210-seguranca2, item 2; ver
+// ../../../html.js): nickname e id vem do perfil gravado pelo POST
+// /profile/create; antes o nickname ia cru para o HTML, que a view exibe com
+// <%- %> ("<svg/onload=alert()>" cabe nos 20 caracteres do nickname)
+const { escapeHtml } = require('../../../html');
 
 
 function cards() {
@@ -13,9 +18,9 @@ function cards() {
 		let left = `card${i-1 >= 0 ? i-1 : "new"}`;
 		let right = `card${i+1 < num ? i+1 : "new"}`;
 
-		html += `<div id="card${i}" class="card" moveleft="${left}" moveright="${right}" select="selectProfile" selectParam="${usr[i].id}">` +
+		html += `<div id="card${i}" class="card" moveleft="${left}" moveright="${right}" select="selectProfile" selectParam="${escapeHtml(usr[i].id)}">` +
                     avatarHtml(usr[i].avatar) +
-                    `<span>${usr[i].name}</span>` +
+                    `<span>${escapeHtml(usr[i].name)}</span>` +
                 '</div>';
 	}
 

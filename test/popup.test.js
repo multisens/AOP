@@ -1,0 +1,304 @@
+// Pop-ups da camada grafica (public/js/popup.js e o repasse em
+// src/modules/graphic-overlays/view.ejs). Correcao de 12/10
+// (spec-1210-defeitos, item 1): o QR code e o PIN do pareamento ficam na tela
+// ate o tv3ws publicar {"close":true} no mesmo topico (fim do pareamento,
+// C.4.3.2 e C.4.3.3) ou ate o prazo da mensagem de abertura (trava de
+// seguranca, 120 s no tv3ws); mensagem invalida nao lanca nem muda a tela.
+// Os scripts da pagina rodam num contexto vm com dubles do jQuery (so o que
+// popup.js usa do #popup), do QRCode, do relogio (setTimeout/clearTimeout) e
+// da publicacao MQTT; o desenho de verdade e conferido no Chrome.
+// Rodada de 12/10 (spec-1210-seguranca, item 3): texto que vem na mensagem
+// (display-name no sim/nao, PIN) entra no HTML do pop-up so escapado.
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const POPUP_JS = path.join(__dirname, '..', 'public', 'js', 'popup.js');
+const VIEW = path.join(__dirname, '..', 'src', 'modules', 'graphic-overlays', 'view.ejs');
+const QR = 'aop/display/layers/popup/qrcode';
+const PIN = 'aop/display/layers/popup/pin';
+const YESNO = 'aop/display/layers/popup/yesno/message';
+const CLOSE = '{"close":true}';
+const PRAZO = 120000;   // tv3ws: PAIRING_POPUP_TIMEOUT_MS
+
+// Script inline da pagina com mqtt_message (o primeiro <script> sem src).
+function viewScript() {
+    const html = fs.readFileSync(VIEW, 'utf8');
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+    const s = scripts.find(c => c.includes('function mqtt_message'));
+    assert.ok(s, 'mqtt_message em view.ejs');
+    return s;
+}
+
+function page() {
+    // relogio de teste
+    let now = 0;
+    let seq = 0;
+    const timers = new Map();
+    const setTimeout = (fn, ms) => { const id = ++seq; timers.set(id, { at: now + (Number(ms) || 0), fn }); return id; };
+    const clearTimeout = id => { timers.delete(id); };
+    const advance = ms => {
+        const end = now + ms;
+        for (;;) {
+            const due = [...timers.entries()].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+            if (!due) break;
+            timers.delete(due[0]);
+            now = due[1].at;
+            due[1].fn();
+        }
+        now = end;
+    };
+
+    // #popup: so o que popup.js usa
+    const el = { html: '', visible: false, height: '' };
+    const popupEl = {
+        html(s) { if (s === undefined) return el.html; el.html = s; return popupEl; },
+        height(h) { el.height = h; return popupEl; },
+        show() { el.visible = true; return popupEl; },
+        hide() { el.visible = false; return popupEl; },
+    };
+    const $ = sel => {
+        if (sel === '#popup') return popupEl;
+        throw new Error(`seletor nao previsto no duble: ${sel}`);
+    };
+    const qrcodes = [];
+    function QRCode(target, opts) { qrcodes.push({ target, text: opts.text }); }
+    const document = { getElementById: id => (id === 'qrcode' && el.html.includes('id="qrcode"') ? { id } : null) };
+    const warnings = [];
+    const console = { log() {}, warn: (...a) => warnings.push(a.join(' ')), error: (...a) => warnings.push(a.join(' ')) };
+
+    const ctx = vm.createContext({ $, QRCode, document, console, setTimeout, clearTimeout });
+    ctx.window = ctx;
+    vm.runInContext(fs.readFileSync(POPUP_JS, 'utf8'), ctx, { filename: 'popup.js' });
+    vm.runInContext(viewScript(), ctx, { filename: 'view.ejs' });
+    const published = [];
+    // a lista e o par saem deste lado (deepEqual compara o prototipo do Array)
+    ctx.__publish = (t, m) => published.push([t, m]);
+    vm.runInContext('publishTopic = (t, m) => __publish(t, m);', ctx);
+
+    const deliver = (topic, msg) => vm.runInContext('mqtt_message', ctx)(null, topic, Buffer.from(msg));
+    const state = () => vm.runInContext('({ has_popup, popup_type, yesno_popup })', ctx);
+    return { ctx, el, deliver, state, advance, timers, qrcodes, published, warnings };
+}
+const open = (value, timeout = PRAZO) => JSON.stringify({ value, timeout });
+
+test('QR code: fica na tela ate o {"close":true} no mesmo topico', () => {
+    const p = page();
+    p.deliver(QR, open('chave-base64url'));
+    assert.equal(p.el.visible, true);
+    assert.match(p.el.html, /QR code/);
+    assert.deepEqual(p.qrcodes.map(q => q.text), ['chave-base64url']);
+    assert.equal(p.state().popup_type, 'qrcode');
+
+    p.advance(1000);   // o prazo antigo era 1 s
+    assert.equal(p.el.visible, true, 'o QR code nao sai em 1 s');
+    p.advance(100000);
+    assert.equal(p.el.visible, true);
+
+    p.deliver(QR, CLOSE);
+    assert.equal(p.el.visible, false);
+    assert.equal(p.el.html, '');
+    assert.equal(p.state().has_popup, false);
+    assert.equal(p.timers.size, 0, 'prazo do pop-up fechado cancelado');
+});
+
+test('PIN: fica na tela ate o {"close":true} no mesmo topico', () => {
+    const p = page();
+    p.deliver(PIN, open('0042'));
+    assert.equal(p.el.visible, true);
+    assert.match(p.el.html, /0042/);
+    p.advance(60000);
+    assert.equal(p.el.visible, true);
+    p.deliver(PIN, CLOSE);
+    assert.equal(p.el.visible, false);
+});
+
+test('trava de seguranca: sem fechamento, o pop-up sai no prazo da abertura', () => {
+    const p = page();
+    p.deliver(PIN, open('1234'));
+    p.advance(PRAZO - 1);
+    assert.equal(p.el.visible, true);
+    p.advance(1);
+    assert.equal(p.el.visible, false);
+    assert.equal(p.state().has_popup, false);
+});
+
+test('fechamento de outro tipo nao fecha o pop-up na tela', () => {
+    const p = page();
+    p.deliver(PIN, open('0042'));
+    p.deliver(QR, CLOSE);
+    assert.equal(p.el.visible, true);
+    assert.match(p.el.html, /0042/);
+
+    p.deliver(QR, open('chave'));   // o QR code substitui o PIN
+    p.deliver(PIN, CLOSE);
+    assert.equal(p.el.visible, true);
+    assert.equal(p.state().popup_type, 'qrcode');
+    p.deliver(QR, CLOSE);
+    assert.equal(p.el.visible, false);
+});
+
+test('{"close":true} no sim/nao nao fecha o sim/nao (so QR code e PIN fecham assim)', () => {
+    const p = page();
+    p.deliver(YESNO, open('Autoriza?', 10000));
+    p.deliver(YESNO, CLOSE);
+    assert.equal(p.el.visible, true);
+    assert.equal(p.state().popup_type, 'yesno');
+    assert.deepEqual(p.published, []);
+});
+
+test('fechamento sem pop-up na tela: nada acontece', () => {
+    const p = page();
+    p.deliver(QR, CLOSE);
+    p.deliver(PIN, CLOSE);
+    assert.equal(p.el.visible, false);
+    assert.equal(p.state().has_popup, false);
+});
+
+test('mensagem invalida nao lanca e nao muda a tela', () => {
+    const p = page();
+    p.deliver(QR, open('chave'));
+    const before = { ...p.el };
+    for (const bad of ['nao-json', '', '{', 'null', '[]', '"texto"', '42', 'true', '{}', '{"value":5}',
+        '{"close":"true"}', '{"close":1}', '{"close":false}', '{"value":null,"timeout":1000}']) {
+        assert.doesNotThrow(() => p.deliver(QR, bad), bad);
+        assert.doesNotThrow(() => p.deliver(PIN, bad), bad);
+        assert.deepEqual(p.el, before, `tela intacta com ${JSON.stringify(bad)}`);
+    }
+    // tipo desconhecido e topico sem tipo
+    assert.doesNotThrow(() => p.deliver('aop/display/layers/popup/xyz', open('x')));
+    assert.doesNotThrow(() => p.deliver('aop/display/layers/popup', open('x')));
+    assert.deepEqual(p.el, before);
+    assert.equal(p.qrcodes.length, 1);
+    assert.ok(p.warnings.length > 0, 'mensagens ignoradas vao para o console');
+    // a pagina continua tratando mensagens
+    p.deliver(QR, CLOSE);
+    assert.equal(p.el.visible, false);
+});
+
+test('prazo de um pop-up que ja saiu nao fecha o seguinte', () => {
+    const p = page();
+    p.deliver(QR, open('A'));            // prazo de A: t = 120 s
+    p.advance(100000);
+    p.deliver(QR, CLOSE);                // A pareou em t = 100 s
+    p.advance(10000);
+    p.deliver(QR, open('B'));            // prazo de B: t = 230 s
+    p.advance(15000);                    // t = 125 s: o prazo de A ja passou
+    assert.equal(p.el.visible, true, 'B continua na tela');
+    assert.deepEqual(p.qrcodes.map(q => q.text), ['A', 'B']);
+    p.advance(105000);                   // t = 230 s
+    assert.equal(p.el.visible, false);
+});
+
+test('pop-up substituido: o prazo do anterior nao vale mais', () => {
+    const p = page();
+    p.deliver(PIN, open('1111', 5000));
+    p.deliver(QR, open('chave'));
+    p.advance(6000);
+    assert.equal(p.el.visible, true, 'o prazo de 5 s do PIN nao fecha o QR code');
+    assert.equal(p.state().popup_type, 'qrcode');
+});
+
+test('sim/nao: "Sim" publica true e as teclas voltam a pagina; o prazo publica false', () => {
+    const p = page();
+    p.deliver(YESNO, open('Autoriza?', 10000));
+    assert.equal(p.state().yesno_popup, true);
+    vm.runInContext('window.PopupYes()', p.ctx);
+    assert.deepEqual(p.published, [['aop/display/layers/popup/yesno/response', 'true']]);
+    assert.equal(p.el.visible, false);
+    assert.equal(p.state().yesno_popup, false, 'relay_key volta a repassar as teclas');
+    p.advance(20000);
+    assert.equal(p.published.length, 1, 'o prazo do sim/nao respondido nao publica nada');
+
+    p.deliver(YESNO, open('De novo?', 10000));
+    p.advance(10000);
+    assert.deepEqual(p.published[1], ['aop/display/layers/popup/yesno/response', 'false']);
+    assert.equal(p.el.visible, false);
+});
+
+test('sim/nao substituido pelo QR code: sem resposta atrasada do sim/nao, teclas fora dos botoes', () => {
+    const p = page();
+    p.deliver(YESNO, open('Autoriza?', 10000));
+    p.deliver(QR, open('chave'));
+    assert.equal(p.state().yesno_popup, false);
+    assert.equal(vm.runInContext('window.PopupYes', p.ctx), null);
+    p.advance(20000);
+    assert.deepEqual(p.published, [], 'o prazo do sim/nao substituido nao responde por ele');
+    assert.equal(p.el.visible, true);
+});
+
+test('excecao no tratamento de uma mensagem nao escapa para o cliente MQTT da pagina', () => {
+    const p = page();
+    // connect() de view.ejs com um cliente MQTT duble
+    const handlers = {};
+    const fakeClient = { on: (ev, h) => { handlers[ev] = h; }, subscribe() {}, publish() {} };
+    p.ctx.mqtt = { connect: () => fakeClient };
+    p.ctx.location = { protocol: 'http:', host: 'tv.test' };
+    p.ctx.fetch = () => undefined;
+    vm.runInContext('connect()', p.ctx);
+    // video/size com JSON invalido: o JSON.parse de mqtt_message lanca
+    assert.doesNotThrow(() => handlers.message('aop/display/layers/video/size', Buffer.from('{')));
+    assert.ok(p.warnings.some(w => /video\/size nao tratada/.test(w)), p.warnings.join(' | '));
+    // e a pagina segue tratando as mensagens seguintes
+    handlers.message(QR, Buffer.from(open('chave')));
+    assert.equal(p.el.visible, true);
+    handlers.message(QR, Buffer.from(CLOSE));
+    assert.equal(p.el.visible, false);
+});
+
+// --- 12/10 (spec-1210-seguranca, item 3): injecao de HTML no pop-up ----------------
+// Mensagem do sim/nao como o tv3ws a monta (api/client-identification/
+// service.ts, askAuthorization), com o display-name escolhido pelo cliente.
+const askMessage = displayName => `A aplicação "${displayName}" deseja acessar as informações do sinal de TV Digital.\nVocê deseja autorizar isto?`;
+const INJECAO = '<img src=x onerror="window.__injetado=1">';
+const INJECAO_ESCAPADA = '&lt;img src=x onerror=&quot;window.__injetado=1&quot;&gt;';
+
+test('sim/nao: display-name com HTML entra escapado, e os botoes seguem os do pop-up', () => {
+    const p = page();
+    p.deliver(YESNO, open(askMessage(INJECAO), 10000));
+    assert.equal(p.el.visible, true);
+    assert.ok(p.el.html.includes(INJECAO_ESCAPADA), p.el.html);
+    assert.ok(!p.el.html.includes('<img'), `HTML do display-name na tela: ${p.el.html}`);
+    // o resto do pop-up e o markup fixo de popup.js
+    assert.equal((p.el.html.match(/<span /g) || []).length, 1);
+    assert.match(p.el.html, /<div id="btyes" class="button focused"/);
+    assert.match(p.el.html, /<div id="btno" class="button"/);
+    vm.runInContext('window.PopupYes()', p.ctx);
+    assert.deepEqual(p.published, [['aop/display/layers/popup/yesno/response', 'true']]);
+});
+
+test('sim/nao: display-name que fecha o span e abre botoes falsos nao vira markup', () => {
+    const p = page();
+    const name = '</span><div id="btyes" select="PopupNo">Sim</div><script>window.__injetado=1</script>';
+    p.deliver(YESNO, open(askMessage(name), 10000));
+    assert.equal((p.el.html.match(/id="btyes"/g) || []).length, 1, p.el.html);
+    assert.ok(!p.el.html.includes('<script'), p.el.html);
+    assert.ok(p.el.html.includes('&lt;/span&gt;&lt;div id=&quot;btyes&quot;'), p.el.html);
+});
+
+test('escape: & < > " e apostrofo viram entidades; texto comum fica igual', () => {
+    const p = page();
+    p.deliver(YESNO, open(askMessage(`Tom & "Jerry's" <b>`), 10000));
+    assert.ok(p.el.html.includes('A aplicação &quot;Tom &amp; &quot;Jerry&#39;s&quot; &lt;b&gt;&quot; deseja acessar'), p.el.html);
+    p.deliver(YESNO, open(askMessage('Meu App 2.0'), 10000));
+    assert.ok(p.el.html.includes('<span class="text">A aplicação &quot;Meu App 2.0&quot; deseja acessar as informações do sinal de TV Digital.\nVocê deseja autorizar isto?</span>'), p.el.html);
+});
+
+test('PIN: valor com HTML entra escapado', () => {
+    const p = page();
+    p.deliver(PIN, open(INJECAO));
+    assert.equal(p.el.visible, true);
+    assert.ok(p.el.html.includes(`<span class="pin">${INJECAO_ESCAPADA}</span>`), p.el.html);
+    assert.ok(!p.el.html.includes('<img'), p.el.html);
+    p.deliver(PIN, open('0042'));
+    assert.ok(p.el.html.includes('<span class="pin">0042</span>'), p.el.html);
+});
+
+test('QR code: o valor vai so para a biblioteca, como texto; o HTML do pop-up e o fixo', () => {
+    const p = page();
+    p.deliver(QR, open(`"></div>${INJECAO}`));
+    assert.deepEqual(p.qrcodes.map(q => q.text), [`"></div>${INJECAO}`]);
+    assert.equal(p.el.html, '<span class="text">Escaneie o QR code abaixo com seu dispositivo.</span>\n<div id="qrcode"></div>');
+});
