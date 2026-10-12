@@ -13,8 +13,19 @@ const { EventEmitter } = require('events');
 const Redis = require('ioredis');
 const express = require('express');
 
+const fs = require('fs');
+const os = require('os');
+
 const { FAIL_FAST_OPTIONS, redisOptions, logRedisEvents, whenReady } = require('../src/redis-options');
 const { platformErrorHandler } = require('../src/http-error');
+
+// G8 (decisao do Luis em 12/10): a criacao de perfil grava o arquivo do avatar
+// em <USER_DATA_PATH>/thumbs/<id>.svg; o despejo o apaga. Diretorio temporario
+// por execucao.
+const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'aop-user-files-'));
+process.env.USER_DATA_PATH = USER_DATA;
+const THUMBS = path.join(USER_DATA, 'thumbs');
+after(() => fs.rmSync(USER_DATA, { recursive: true, force: true }));
 
 // ids de perfil em UUID (Tabela 7; decisao do Luis em 11/10, F-3): o duble
 // nao confere o esquema, mas os ids sao do formato que o Redis aceita
@@ -329,6 +340,131 @@ test('POST /profile/create: idioma ou visibilidade fora do esquema 400 (antes de
             assert.ok(j.description.includes(msg), j.description);
         } finally { recusa = null; }
     });
+});
+
+// --- G8 (decisao do Luis em 12/10): avatar = nome de arquivo das miniaturas ------
+// Tabela 7: "avatar" e "file path". O gestor grava o SVG do formulario em
+// <USER_DATA_PATH>/thumbs/<id>.svg (o USER_THUMBS do tv3ws, que o entrega pela
+// C.6.14.6) e o campo avatar recebe o nome do arquivo; o despejo (P3) apaga o
+// arquivo. Antes, o campo levava o SVG em linha.
+const { AVATAR_COLORS, DEFAULT_AVATAR_SVG } = require('../src/modules/profile-manager/avatar');
+// formato do contrato (spec-1210-g8g9; o mesmo do esquema do Redis)
+const AVATAR_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(svg|png|jpg|jpeg|webp)$/;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+// campos do hash na chamada tv30_perfil_grava <id> <n> <consent x n> <campo valor ...>
+const hashOfCall = call => {
+    const [, , n, ...resto] = call;
+    const h = {};
+    for (let i = Number(n); i + 1 < resto.length; i += 2) h[resto[i]] = resto[i + 1];
+    return h;
+};
+const thumbFiles = () => (fs.existsSync(THUMBS) ? fs.readdirSync(THUMBS).sort() : []);
+const readThumb = name => fs.readFileSync(path.join(THUMBS, name), 'utf8');
+
+test('G8: createProfile grava o SVG do formulario em <thumbs>/<id>.svg e o avatar e o nome do arquivo', async () => {
+    store.clear();
+    fcalls.length = 0;
+    fs.rmSync(THUMBS, { recursive: true, force: true });   // o diretorio e criado se faltar
+    const svg = AVATAR_COLORS[3].svg;
+    const { user } = await profiles.createProfile({ nickname: 'Arquivo', avatar: svg });
+    assert.equal(user.avatar, `${user.id}.svg`);
+    assert.match(user.avatar, AVATAR_NAME_RE);
+    assert.equal(hashOfCall(fcalls[0]).avatar, user.avatar, 'campo avatar gravado no Redis = nome do arquivo');
+    assert.deepEqual(thumbFiles(), [user.avatar]);
+    assert.equal(readThumb(user.avatar), svg, 'conteudo = o SVG enviado');
+
+    // SVG sem xmlns: o arquivo (image/svg+xml) leva o namespace
+    const { user: semNs } = await profiles.createProfile({ nickname: 'SemNs', avatar: '<svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg>' });
+    assert.equal(readThumb(semNs.avatar), `<svg xmlns="${SVG_NS}" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`);
+
+    // pela rota: a resposta traz o nome
+    await withApp(app => app.use('/profile', managerRouter), async base => {
+        const r = await fetch(`${base}/profile/create`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nickname: 'Rota', avatar: AVATAR_COLORS[1].svg }) });
+        assert.equal(r.status, 201);
+        const j = await r.json();
+        assert.equal(j.user.avatar, `${j.user.id}.svg`);
+        assert.equal(readThumb(j.user.avatar), AVATAR_COLORS[1].svg);
+    });
+});
+
+test('G8: avatar ausente ou que nao e SVG (conferido como as telas conferiam) grava o padrao', async () => {
+    for (const avatar of [undefined, null, '', 'a.png', 'c3167a18-5dc5-4a6e-9b1d-3f2a7c5e8d10.svg', '<img src=x onerror=alert(1)>',
+        ' <svg viewBox="0 0 1 1"/>', '<svgx>', 42, ['<svg/>']]) {
+        store.clear();
+        const { user } = await profiles.createProfile({ nickname: 'Padrao', avatar });
+        assert.equal(readThumb(user.avatar), DEFAULT_AVATAR_SVG, JSON.stringify(avatar));
+    }
+    // SVG hostil passa (como antes, quando ia em linha): as telas o mostram so
+    // dentro de <img> (test/views-escape.test.js)
+    store.clear();
+    const hostil = `<svg xmlns="${SVG_NS}" onload="alert(1)"><script>alert(2)</script></svg>`;
+    const { user } = await profiles.createProfile({ nickname: 'Hostil', avatar: hostil });
+    assert.equal(readThumb(user.avatar), hostil);
+});
+
+test('G8: perfil recusado pela funcao apaga o arquivo; falha ao gravar o arquivo nao grava o perfil', async () => {
+    store.clear();
+    fs.rmSync(THUMBS, { recursive: true, force: true });
+    fcalls.length = 0;
+    recusa = ['tv30_perfil_grava', `TV30ESQUEMA tv30_perfil_grava: user:${UM} campo avatar: fora do formato`];
+    try {
+        await assert.rejects(profiles.createProfile({ nickname: 'Recusado' }), /TV30ESQUEMA/);
+    } finally { recusa = null; }
+    assert.equal(fcalls.filter(c => c[0] === 'tv30_perfil_grava').length, 1);
+    assert.deepEqual(thumbFiles(), [], 'arquivo apagado depois da recusa');
+
+    // diretorio de miniaturas impossivel (um arquivo no lugar): nada no Redis
+    fs.rmSync(THUMBS, { recursive: true, force: true });
+    fs.writeFileSync(THUMBS, 'nao e diretorio');
+    fcalls.length = 0;
+    try {
+        await assert.rejects(profiles.createProfile({ nickname: 'SemDir' }));
+        assert.deepEqual(fcalls.filter(c => c[0] === 'tv30_perfil_grava'), [], 'perfil nao gravado sem o arquivo');
+    } finally { fs.rmSync(THUMBS, { force: true }); }
+});
+
+test('G8: despejo (P3) apaga o arquivo do perfil despejado, e so ele; sem arquivo, nada falha', async () => {
+    const setup = () => {
+        store.clear();
+        fcalls.length = 0;
+        fs.rmSync(THUMBS, { recursive: true, force: true });
+        fs.mkdirSync(THUMBS, { recursive: true });
+        const idx = new Set();
+        for (let i = 1; i <= 5; i++) {
+            idx.add(perfil(i));
+            store.set(`user:${perfil(i)}`, { nickname: `P${i}`, avatar: `${perfil(i)}.svg`, lastAccess: String(i === 3 ? 10 : 1000 + i) });
+            fs.writeFileSync(path.join(THUMBS, `${perfil(i)}.svg`), DEFAULT_AVATAR_SVG);
+        }
+        store.set('users:index', idx);
+        fs.writeFileSync(path.join(THUMBS, 'outro.png'), 'PNG');
+    };
+    setup();
+    const { user, evicted } = await profiles.createProfile({ nickname: 'Sexto' });
+    assert.equal(evicted.id, perfil(3));
+    const esperado = [1, 2, 4, 5].map(i => `${perfil(i)}.svg`).concat(['outro.png', user.avatar]).sort();
+    assert.deepEqual(thumbFiles(), esperado);
+
+    // arquivo do despejado ja ausente: o despejo segue
+    setup();
+    fs.rmSync(path.join(THUMBS, `${perfil(3)}.svg`));
+    const r2 = await profiles.createProfile({ nickname: 'Sexto' });
+    assert.equal(r2.evicted.id, perfil(3));
+
+    // falha ao apagar (um diretorio com o nome do arquivo): so o log; o perfil
+    // novo e criado
+    setup();
+    fs.rmSync(path.join(THUMBS, `${perfil(3)}.svg`));
+    fs.mkdirSync(path.join(THUMBS, `${perfil(3)}.svg`));
+    const logs = [];
+    const quiet = console.error;
+    console.error = (...a) => logs.push(a.join(' '));
+    try {
+        const r3 = await profiles.createProfile({ nickname: 'Sexto' });
+        assert.equal(r3.evicted.id, perfil(3));
+        assert.ok(fs.existsSync(path.join(THUMBS, r3.user.avatar)));
+    } finally { console.error = quiet; }
+    assert.ok(logs.some(l => l.includes(perfil(3)) && /arquivo do avatar ficou/.test(l)), logs.join(' | '));
 });
 
 test('platformErrorHandler: excecao em rota async vira 404 {error:200}', async () => {
