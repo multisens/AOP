@@ -3,6 +3,7 @@
 // user-api do tv3ws (atravessando o limite de servico e de linguagem).
 // Toda leitura passa a vir daqui; as views recebem os valores por parametro
 // de renderizacao.
+const { svgImageHtml } = require('../../html');
 
 function svgAvatar(hex) {
     return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
@@ -27,12 +28,18 @@ const AVATAR_COLORS = [
     { hex: '#7c6e4d', name: 'Marrom' }
 ].map(c => ({ ...c, svg: svgAvatar(c.hex) }));
 
+// Avatar eh SVG inline gravado no Redis/JSON; qualquer outra coisa
+// (legado) cai no default.
+// Correcao de 12/10 (spec-1210-seguranca2, item 2): o avatar sai como <img>
+// com o SVG em URL data: (../../html.js), e nao mais como SVG em linha no
+// HTML. O avatar vem do corpo do POST /profile/create sem conferencia de
+// formato (service.js, createProfile): um "<svg onload=...>" ou com <script>
+// rodava na tela da TV no catalogo, na aplicacao de abertura e na escolha de
+// perfil. Num <img> o SVG nao roda script. O padrao tambem vai como <img>,
+// para os avatares terem a mesma caixa nas views.
 function avatarHtml(avatar) {
-    if (!avatar) return DEFAULT_AVATAR_SVG;
-    // Avatar eh SVG inline gravado no Redis/JSON; qualquer outra coisa
-    // (legado) cai no default.
-    if (typeof avatar === 'string' && avatar.startsWith('<svg')) return avatar;
-    return DEFAULT_AVATAR_SVG;
+    const svg = typeof avatar === 'string' && avatar.startsWith('<svg') ? avatar : DEFAULT_AVATAR_SVG;
+    return svgImageHtml(svg, { class: 'avatar', alt: '' });
 }
 
 module.exports = { svgAvatar, DEFAULT_AVATAR_HEX, DEFAULT_AVATAR_SVG, AVATAR_COLORS, avatarHtml };

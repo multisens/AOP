@@ -151,7 +151,17 @@
                     subscribe_topics(client);
                     fetch('ready');
                 });
-                client.on('message', (t, m) => { mqtt_message(client, t, m) });
+                // (12/10) excecao no tratamento de uma mensagem vai para o
+                // console: antes ela escapava para o cliente MQTT, e a pagina
+                // parava de tratar TODAS as mensagens seguintes (medido no
+                // Chrome 154 com um JSON invalido no topico do QR code)
+                client.on('message', (t, m) => {
+                    try {
+                        mqtt_message(client, t, m);
+                    } catch (err) {
+                        console.error(`Mensagem MQTT em ${t} nao tratada:`, err);
+                    }
+                });
                 publishTopic = (t, m) => { client.publish(t, m); };
             }
 
@@ -245,8 +255,10 @@
                     $('#video').css(JSON.parse(message));
                 }
                 else if (t.startsWith('popup') ) {
-                    content = JSON.parse(message);
-                    presentPopup(t.split('/')[1], content.value, Number(content.timeout));
+                    // abertura e, desde 12/10, fechamento ({"close":true} no
+                    // topico do QR code ou do PIN, no fim do pareamento),
+                    // com a mensagem conferida antes: /js/popup.js
+                    handlePopupMessage(t.split('/')[1], message.toString());
                 }
             }
 
