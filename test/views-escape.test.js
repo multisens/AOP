@@ -14,12 +14,15 @@ const path = require('path');
 const Module = require('module');
 const express = require('express');
 
-const { escapeHtml, svgDataUri, svgImageHtml, SVG_NS } = require('../src/html');
+const { escapeHtml, svgDataUri, svgImageHtml, svgProblem, withSvgNamespace, SVG_NS } = require('../src/html');
 
 // --- dados -----------------------------------------------------------------------
 const INJ = tag => `window.__injetado=(window.__injetado||[]).concat('${tag}')`;
 // amostra sem xmlns, como tres das quatro do bcast (uff, webmedia, eduplay)
-const SAMPLE_ICON = '<svg viewBox="0 0 180 95" style="fill:#003461" preserveAspectRatio="xMidYMid meet"><path d="M0 0h10v10z"/></svg>';
+// amostra como as do bcast depois da G7 (Joel, 15/10): com o xmlns do SVG
+const SAMPLE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 95" style="fill:#003461" preserveAspectRatio="xMidYMid meet"><path d="M0 0h10v10z"/></svg>';
+// e como eram ate 15/10: sem o namespace (o AoP acrescentava; agora recusa)
+const ICON_NO_NS = '<svg viewBox="0 0 180 95"><path d="M0 0h10v10z"/></svg>';
 const HOSTILE = {
     globalServiceId: `urn:hostil" onfocus="${INJ('gsid')}" autofocus tabindex="1`,
     appName: `<img src=x onerror="${INJ('appName')}">`,
@@ -102,18 +105,40 @@ test('escapeHtml: & < > " \' escapados; nulo vira vazio', () => {
     assert.equal(escapeHtml(42), '42');
 });
 
-test('svgDataUri: SVG vira URL data: de imagem; xmlns acrescentado so quando falta; sem <svg>, vazio', () => {
-    assert.equal(decode(svgDataUri(SAMPLE_ICON)), SAMPLE_ICON.replace('<svg ', `<svg xmlns="${SVG_NS}" `));
-    const withNs = `<svg xmlns="${SVG_NS}" viewBox="0 0 1 1"/>`;
+test('svgDataUri (G7, Joel 15/10): so SVG no namespace do SVG; sem xmlns, ou com outro, recusado (vazio)', () => {
+    assert.equal(decode(svgDataUri(SAMPLE_ICON)), SAMPLE_ICON);
+    const withNs = `<svg xmlns='${SVG_NS}' viewBox="0 0 1 1"/>`;
     assert.equal(decode(svgDataUri(withNs)), withNs);
-    // xmlns:xlink nao e o namespace padrao
-    const xlink = '<svg xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1 1"/>';
-    assert.equal(decode(svgDataUri(xlink)), `<svg xmlns="${SVG_NS}" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1 1"/>`);
     // prologo XML e espacos em volta
-    assert.equal(decode(svgDataUri('  <?xml version="1.0"?><svg>x</svg> ')), `<?xml version="1.0"?><svg xmlns="${SVG_NS}">x</svg>`);
+    assert.equal(decode(svgDataUri(`  <?xml version="1.0"?><svg xmlns="${SVG_NS}">x</svg> `)), `<?xml version="1.0"?><svg xmlns="${SVG_NS}">x</svg>`);
+    // fora do namespace: recusado, com o motivo
+    for (const v of [ICON_NO_NS, '<svg xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1 1"/>', '<svg xmlns="http://example.com/x"/>']) {
+        assert.equal(svgDataUri(v), '', v);
+        assert.match(svgProblem(v), /fora do namespace/, v);
+    }
     for (const v of [undefined, null, 42, '', 'http://x/icone.svg', 'javascript:alert(1)', '<svgx>', '<img src=x>']) {
         assert.equal(svgDataUri(v), '', String(v));
+        assert.notEqual(svgProblem(v), '', String(v));
     }
+});
+
+test('withSvgNamespace (G7): o SVG que o proprio AoP grava (avatar) ganha o xmlns quando falta', () => {
+    assert.equal(withSvgNamespace(ICON_NO_NS), ICON_NO_NS.replace('<svg ', `<svg xmlns="${SVG_NS}" `));
+    assert.equal(withSvgNamespace(SAMPLE_ICON), SAMPLE_ICON);
+    assert.equal(withSvgNamespace('<img src=x>'), '');
+});
+
+test('svgImageHtml (G7): icone recusado nao e exibido e sai no log com o motivo, uma vez', () => {
+    const avisos = [];
+    const original = console.warn;
+    console.warn = m => avisos.push(String(m));
+    try {
+        assert.equal(svgImageHtml(ICON_NO_NS, { alt: '' }, 'appIcon do BAM de urn:teste'), '');
+        assert.equal(svgImageHtml(ICON_NO_NS, { alt: '' }, 'appIcon do BAM de urn:teste'), '');
+        assert.equal(svgImageHtml(undefined, {}, 'appIcon do BAM de urn:outro'), '');
+    } finally { console.warn = original; }
+    assert.equal(avisos.length, 1, avisos.join('\n'));
+    assert.match(avisos[0], /SVG recusado.*appIcon do BAM de urn:teste.*fora do namespace/);
 });
 
 test('svgImageHtml: <img> com a URL data: e atributos escapados; sem SVG, nada', () => {
@@ -131,7 +156,7 @@ test('catalogo (/appcat): appName, globalServiceId e nickname hostis escapados; 
     assert.ok(html.includes(`<span>${escapeHtml(users[1].name)}</span>`), 'nickname escapado');
     const srcs = imgSources(html).map(decode);
     // icones das duas aplicacoes e o avatar
-    assert.ok(srcs.includes(SAMPLE_ICON.replace('<svg ', `<svg xmlns="${SVG_NS}" `)), 'icone da amostra, com xmlns');
+    assert.ok(srcs.includes(SAMPLE_ICON), 'icone da amostra, com xmlns');
     assert.ok(srcs.includes(HOSTILE.appIcon), 'icone hostil so dentro do <img>');
     assert.ok(srcs.includes(HOSTILE_AVATAR), 'avatar hostil so dentro do <img>');
     assert.ok(html.includes('<span>UFF TV</span>'), 'nome comum sem mudanca');
@@ -181,9 +206,11 @@ test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">;
     put('cor.svg', AVATAR_COLORS[2].svg);
     assert.equal(svgOf(avatarHtml('cor.svg')), AVATAR_COLORS[2].svg);
     assert.equal(svgOf(avatarHtml('hostil.svg')), HOSTILE_AVATAR);
-    // SVG sem xmlns no arquivo: o namespace e acrescentado (como o icone do BAM)
+    // SVG sem xmlns no arquivo (que o AoP nao gravou: ele grava com o xmlns,
+    // G7): recusado como o icone do BAM, e vale o padrao. Ate 15/10 o
+    // namespace era acrescentado na leitura.
     put('sem-ns.svg', '<svg viewBox="0 0 1 1"/>');
-    assert.equal(svgOf(avatarHtml('sem-ns.svg')), `<svg xmlns="${SVG_NS}" viewBox="0 0 1 1"/>`);
+    assert.equal(svgOf(avatarHtml('sem-ns.svg')), DEFAULT_AVATAR_SVG);
     // outras extensoes do contrato: tipo pela extensao, bytes intactos
     const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff, 0x10]);
     for (const [name, mime] of [['p.png', 'image/png'], ['j.jpg', 'image/jpeg'], ['k.jpeg', 'image/jpeg'], ['w.webp', 'image/webp']]) {

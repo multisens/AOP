@@ -2,7 +2,7 @@
 // teto vivem aqui — nao sao endpoint das APIs de usuario do Anexo C. A
 // escrita e da plataforma; a antiga rota fora-da-spec POST /tv3/users do
 // tv3ws deixa de existir.
-// P4 (Luis, 10/10): criacao, despejo e lastAccess passam pelas funcoes do
+// P4 (Luis, 10/10): criacao e lastAccess passam pelas funcoes do
 // Redis (../../redis-funcoes.js), que conferem o esquema da Tabela 7
 // (infra/redis/esquema.json) e gravam as chaves do perfil juntas. A
 // validacao abaixo continua: e ela que responde 400 com a mensagem para o
@@ -13,7 +13,13 @@ const redis = require('../../redis-client');
 const funcoes = require('../../redis-funcoes');
 const avatarFiles = require('./avatar');
 
-// P3: limite de cinco perfis, com despejo por ultimo acesso mais antigo.
+// Limite de cinco perfis (10.3.3). Desde a resposta do Joel de 15/10
+// ("Observacoes sobre pontos fora da lista"), a criacao do sexto e RECUSADA, e
+// o telespectador e informado; nenhum perfil e despejado. O despejo por
+// ultimo acesso da 10.3.3 e da quota de area privativa, e nao dos perfis.
+// Apoio: a proposta de emenda da Issue 95 do Forum (PRFFR-07), pela qual
+// apagar um perfil exige confirmacao explicita do telespectador. Ate 15/10
+// (P3), o sexto despejava o perfil de ultimo acesso mais antigo.
 const MAX_PROFILES = 5;
 
 const VALID_RATINGS = ['L', '10', '12', '14', '16', '18'];
@@ -82,72 +88,24 @@ function validateProfile(userData) {
 
 // D-0510-5 (reuniao 05/10 com o Joel; P5, um dono por familia de chave): a
 // plataforma e a dona dos perfis (users:index, user:{id}, user:{id}:consent)
-// — cria, despeja (P3) e, desde 05/10, e a UNICA que grava o lastAccess
+// — cria e, desde 05/10, e a UNICA que grava o lastAccess
 // (antes gravado pelo tv3ws ao receber aop/currentUser). Grava so se o perfil
 // existe em users:index: o HSET avulso de antes criava hash fantasma
 // user:{id} para id desconhecido. Teste e escrita atomicos (funcao
 // tv30_perfil_ultimo_acesso; antes, script EVAL daqui), para nao recriar um
-// perfil despejado no meio.
+// perfil removido no meio.
 async function touchLastAccess(id, now = Date.now()) {
     if (!id) return false;
     return funcoes.perfilUltimoAcesso(String(id), String(now));
 }
 
-// Ultimo acesso do perfil: gravado na criacao e quando ele vira o usuario
-// corrente (lastAccess no hash, touchLastAccess). Sem lastAccess (ex.: perfil
-// da carga inicial nunca usado), conta como o mais antigo (0). Desde a decisao
-// do Luis em 11/10 (F-3) o id e UUID e nao carrega instante nenhum; antes, o
-// instante de criacao saia do id user_<epoch-ms> — e um UUID que comeca por
-// digitos viraria um instante falso nessa leitura.
-function lastAccessOf(fields) {
-    const explicit = parseInt(fields.lastAccess || '', 10);
-    return isNaN(explicit) ? 0 : explicit;
-}
-
-async function evictLeastRecentlyUsed() {
-    const ids = await redis.smembers('users:index');
-
-    let oldest = null;
-    let oldestTs = Infinity;
-    for (const id of ids) {
-        const fields = await redis.hgetall(`user:${id}`);
-        const ts = lastAccessOf(fields);
-        if (ts < oldestTs) {
-            oldestTs = ts;
-            oldest = { id, nickname: fields.nickname || fields.name || id };
-        }
-    }
-    if (!oldest) return null;
-
-    // users:index, user:{id}, user:{id}:consent e as areas privativas por
-    // contexto de servico (user:{id}:broadcaster-attrs:*) saem juntos, numa
-    // funcao so (P4; antes SREM, DEL, KEYS e DEL avulsos).
-    // PENDENTE (Joel): user:{id}:broadcaster-attrs:{scid} tem dois escritores
-    // — o tv3ws grava (C.6.14.5) e a plataforma apaga aqui no despejo (P3).
-    // P5 pede um dono por familia de chave; quem e o dono desta nao foi
-    // decidido em 05/10. Mantido como estava.
-    await funcoes.perfilRemove(oldest.id);
-
-    // G8 (decisao do Luis em 12/10): o arquivo do avatar que o gestor gravou
-    // para o perfil (<thumbs>/<id>.svg, ./avatar.js) sai depois do perfil. Se
-    // o Redis falhar acima, o perfil fica e o arquivo tambem. Falha ao apagar
-    // so vai para o log: o perfil ja saiu, e o arquivo orfao nao e entregue
-    // pela C.6.14.6 (o tv3ws so entrega o avatar de um perfil existente).
-    await avatarFiles.removeAvatarFile(oldest.id)
-        .catch(err => console.error(`[profiles] perfil ${oldest.id} despejado, mas o arquivo do avatar ficou: ${err.message}`));
-
-    return oldest;
-}
-
 async function createProfile(userData) {
     const nickname = validateProfile(userData);
 
-    // P3: teto de cinco perfis com despejo do de ultimo acesso mais antigo.
-    // Laco (limitado) porque uma base anterior ao teto pode ter mais de 5.
-    let evicted = null;
-    for (let guard = 0; guard < 32 && (await redis.scard('users:index')) >= MAX_PROFILES; guard++) {
-        evicted = await evictLeastRecentlyUsed();
-        if (!evicted) break;
+    // Teto de cinco perfis: o sexto e recusado (Joel, 15/10), com a mensagem
+    // para o formulario (400). Uma base com mais de cinco tambem recusa.
+    if ((await redis.scard('users:index')) >= MAX_PROFILES) {
+        throw new ValidationError(`O limite de ${MAX_PROFILES} perfis foi atingido. O perfil não foi criado.`);
     }
 
     // Tabela 7: id "UUID string". Decisao do Luis em 11/10 (F-3): UUID no
@@ -209,7 +167,7 @@ async function createProfile(userData) {
         throw err;
     }
 
-    return { user: { ...newUser, accessConsent }, evicted };
+    return { user: { ...newUser, accessConsent } };
 }
 
 module.exports = { createProfile, touchLastAccess, ValidationError, MAX_PROFILES };

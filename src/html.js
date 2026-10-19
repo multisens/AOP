@@ -21,18 +21,35 @@ function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
-// Texto com SVG -> documento SVG (image/svg+xml); '' se nao houver elemento
-// <svg>. Como documento image/svg+xml, o elemento raiz precisa do namespace do
-// SVG, que o SVG em linha no HTML dispensa; tres das quatro amostras do bcast
-// (uff, webmedia, eduplay) vem sem ele. Sem xmlns no <svg>, ele e acrescentado
-// para que esses icones continuem aparecendo. O resto do texto nao muda (SVG
-// que nao seja XML bem formado deixa de aparecer: no HTML o analisador
-// tolerava). Desde a decisao do Luis em 12/10 (G8), e tambem o conteudo do
-// arquivo do avatar que o gestor de perfis grava (profile-manager/avatar.js).
-// PENDENTE (Joel): acrescentar o xmlns e tolerancia com SVG fora de
-// image/svg+xml (as amostras do bcast); corrigir as amostras no bcast
-// dispensaria.
+// G7 (Joel, 15/10): o SVG que vem de fora da plataforma (appIcon e
+// bannerIcon do BAM) precisa estar no namespace do SVG. A Tabela 6 da a esses
+// campos o tipo xs:any namespace="http://www.w3.org/2000/svg": icone sem o
+// xmlns tira o BAM da norma, e o AoP nao o corrige mais. Corrigir em silencio
+// faria a emissora que experimenta contra o testbed validar um BAM que um
+// receptor que confira o tipo recusaria. Ate 15/10 o AoP acrescentava o xmlns
+// que faltava (tres das quatro amostras do bcast vinham sem ele; corrigidas
+// em 15/10). svgProblem diz o motivo da recusa ('' = aceito).
+function svgProblem(svg) {
+    if (typeof svg !== 'string' || svg.trim() === '') return 'ausente';
+    const root = /<svg(?=[\s/>])[^>]*>/.exec(svg);
+    if (!root) return 'sem elemento <svg>';
+    if (!/\sxmlns\s*=\s*(["'])http:\/\/www\.w3\.org\/2000\/svg\1/.test(root[0])) {
+        return `elemento <svg> fora do namespace ${SVG_NS} (xmlns ausente ou outro)`;
+    }
+    return '';
+}
+
+// Texto com SVG -> documento SVG (image/svg+xml); '' se recusado (svgProblem).
+// O resto do texto nao muda (SVG que nao seja XML bem formado deixa de
+// aparecer: no HTML o analisador tolerava).
 function svgDocument(svg) {
+    return svgProblem(svg) ? '' : svg.trim();
+}
+
+// O SVG que o PROPRIO AoP grava (o avatar do perfil, G8): o documento gravado
+// leva o xmlns (G7), acrescentado aqui quando o formulario o manda sem ele.
+// '' se nao houver elemento <svg>. So o gestor de perfis usa.
+function withSvgNamespace(svg) {
     if (typeof svg !== 'string') return '';
     let doc = svg.trim();
     const root = /<svg(?=[\s/>])[^>]*>/.exec(doc);
@@ -40,7 +57,7 @@ function svgDocument(svg) {
     if (!/\sxmlns\s*=/.test(root[0])) {
         doc = `${doc.slice(0, root.index)}<svg xmlns="${SVG_NS}"${doc.slice(root.index + 4)}`;
     }
-    return doc;
+    return svgDocument(doc);
 }
 
 // Texto com SVG -> URL data: de imagem; '' se nao houver elemento <svg>
@@ -56,8 +73,16 @@ function imageHtml(src, attrs = {}) {
     return `<img src="${escapeHtml(src)}"${extra}>`;
 }
 
-// <img> do SVG, com atributos extras escapados; '' sem SVG
-function svgImageHtml(svg, attrs = {}) {
+// <img> do SVG, com atributos extras escapados; '' sem SVG. Com label, o SVG
+// presente mas recusado sai no log com o motivo (G7), uma vez por label e
+// motivo (as telas sao montadas de novo a cada visita).
+const refusalsLogged = new Set();
+function svgImageHtml(svg, attrs = {}, label = '') {
+    const problem = svgProblem(svg);
+    if (problem && problem !== 'ausente' && label && !refusalsLogged.has(`${label}|${problem}`)) {
+        refusalsLogged.add(`${label}|${problem}`);
+        console.warn(`[aop] AVISO SVG recusado, nao exibido (${label}): ${problem}`);
+    }
     return imageHtml(svgDataUri(svg), attrs);
 }
 
@@ -71,4 +96,4 @@ function cssHexColor(value, fallback, { alpha = false } = {}) {
     return typeof value === 'string' && re.test(value) ? value : fallback;
 }
 
-module.exports = { escapeHtml, svgDocument, svgDataUri, imageHtml, svgImageHtml, cssHexColor, SVG_NS };
+module.exports = { escapeHtml, svgProblem, svgDocument, withSvgNamespace, svgDataUri, imageHtml, svgImageHtml, cssHexColor, SVG_NS };

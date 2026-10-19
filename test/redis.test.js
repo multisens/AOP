@@ -20,7 +20,7 @@ const { FAIL_FAST_OPTIONS, redisOptions, logRedisEvents, whenReady } = require('
 const { platformErrorHandler } = require('../src/http-error');
 
 // G8 (decisao do Luis em 12/10): a criacao de perfil grava o arquivo do avatar
-// em <USER_DATA_PATH>/thumbs/<id>.svg; o despejo o apaga. Diretorio temporario
+// em <USER_DATA_PATH>/thumbs/<id>.svg. Diretorio temporario
 // por execucao.
 const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'aop-user-files-'));
 process.env.USER_DATA_PATH = USER_DATA;
@@ -270,7 +270,10 @@ test('createProfile: UMA chamada tv30_perfil_grava com a visibilidade do servico
     assert.notEqual(outro.id, user.id);
 });
 
-test('despejo (P3): UMA chamada tv30_perfil_remove com o perfil de ultimo acesso mais antigo', async () => {
+// Joel, 15/10 ("Observacoes sobre pontos fora da lista"): o sexto perfil e
+// recusado, com a mensagem para o formulario, e nenhum perfil e despejado (ate
+// 15/10, P3, o de ultimo acesso mais antigo saia).
+test('limite de cinco: o sexto perfil e recusado (ValidationError), sem despejo nem gravacao', async () => {
     store.clear();
     fcalls.length = 0;
     const idx = new Set();
@@ -278,33 +281,19 @@ test('despejo (P3): UMA chamada tv30_perfil_remove com o perfil de ultimo acesso
         idx.add(perfil(i));
         store.set(`user:${perfil(i)}`, { nickname: `P${i}`, lastAccess: String(1000 + i) });
     }
-    store.set(`user:${perfil(3)}`, { nickname: 'P3', lastAccess: '10' });
     store.set(`user:${perfil(3)}:broadcaster-attrs:urn:s`, { a: '1' });
     store.set('users:index', idx);
-    const { evicted } = await profiles.createProfile({ nickname: 'Sexto' });
-    assert.equal(evicted.id, perfil(3));
-    assert.deepEqual(fcalls.map(c => c.slice(0, 2)), [['tv30_perfil_remove', perfil(3)], ['tv30_perfil_grava', fcalls[1][1]]]);
-    assert.equal(store.has(`user:${perfil(3)}:broadcaster-attrs:urn:s`), false);
+    await assert.rejects(profiles.createProfile({ nickname: 'Sexto' }),
+        err => err instanceof profiles.ValidationError && /limite de 5 perfis/.test(err.message));
+    assert.deepEqual(fcalls, [], 'nenhuma funcao do Redis chamada');
     assert.equal(setOf('users:index').size, 5);
-});
+    assert.equal(store.has(`user:${perfil(3)}:broadcaster-attrs:urn:s`), true);
 
-// F-3 (decisao do Luis em 11/10): o id e UUID e nao carrega instante. Perfil
-// sem lastAccess (carga inicial nunca usada) e o mais antigo, qualquer que seja
-// o id — a leitura antiga do instante embutido no id (user_<epoch-ms>) daria a
-// este UUID, que comeca por digitos, o instante 99999999 e despejaria outro.
-test('despejo (P3): perfil sem lastAccess conta como o mais antigo, sem tirar instante do id', async () => {
-    store.clear();
-    fcalls.length = 0;
-    const semAcesso = '99999999-9999-4999-8999-999999999999';
-    const idx = new Set([semAcesso]);
-    store.set(`user:${semAcesso}`, { nickname: 'Carga' });
-    for (let i = 1; i <= 4; i++) {
-        idx.add(perfil(i));
-        store.set(`user:${perfil(i)}`, { nickname: `P${i}`, lastAccess: String(1000 + i) });
-    }
-    store.set('users:index', idx);
-    const { evicted } = await profiles.createProfile({ nickname: 'Sexto' });
-    assert.equal(evicted.id, semAcesso);
+    // com quatro, o quinto e criado
+    idx.delete(perfil(5));
+    store.delete(`user:${perfil(5)}`);
+    const { user } = await profiles.createProfile({ nickname: 'Quinto' });
+    assert.match(user.id, UUID_RE);
 });
 
 test('POST /profile/create: idioma ou visibilidade fora do esquema 400 (antes de gravar); recusa da funcao 404 {error:200}', async () => {
@@ -345,7 +334,7 @@ test('POST /profile/create: idioma ou visibilidade fora do esquema 400 (antes de
 // --- G8 (decisao do Luis em 12/10): avatar = nome de arquivo das miniaturas ------
 // Tabela 7: "avatar" e "file path". O gestor grava o SVG do formulario em
 // <USER_DATA_PATH>/thumbs/<id>.svg (o USER_THUMBS do tv3ws, que o entrega pela
-// C.6.14.6) e o campo avatar recebe o nome do arquivo; o despejo (P3) apaga o
+// C.6.14.6) e o campo avatar recebe o nome do arquivo; a criacao que falha apaga o
 // arquivo. Antes, o campo levava o SVG em linha.
 const { AVATAR_COLORS, DEFAULT_AVATAR_SVG } = require('../src/modules/profile-manager/avatar');
 // formato do contrato (spec-1210-g8g9; o mesmo do esquema do Redis)
@@ -424,47 +413,28 @@ test('G8: perfil recusado pela funcao apaga o arquivo; falha ao gravar o arquivo
     } finally { fs.rmSync(THUMBS, { force: true }); }
 });
 
-test('G8: despejo (P3) apaga o arquivo do perfil despejado, e so ele; sem arquivo, nada falha', async () => {
-    const setup = () => {
-        store.clear();
-        fcalls.length = 0;
-        fs.rmSync(THUMBS, { recursive: true, force: true });
-        fs.mkdirSync(THUMBS, { recursive: true });
-        const idx = new Set();
-        for (let i = 1; i <= 5; i++) {
-            idx.add(perfil(i));
-            store.set(`user:${perfil(i)}`, { nickname: `P${i}`, avatar: `${perfil(i)}.svg`, lastAccess: String(i === 3 ? 10 : 1000 + i) });
-            fs.writeFileSync(path.join(THUMBS, `${perfil(i)}.svg`), DEFAULT_AVATAR_SVG);
-        }
-        store.set('users:index', idx);
-        fs.writeFileSync(path.join(THUMBS, 'outro.png'), 'PNG');
-    };
-    setup();
-    const { user, evicted } = await profiles.createProfile({ nickname: 'Sexto' });
-    assert.equal(evicted.id, perfil(3));
-    const esperado = [1, 2, 4, 5].map(i => `${perfil(i)}.svg`).concat(['outro.png', user.avatar]).sort();
-    assert.deepEqual(thumbFiles(), esperado);
-
-    // arquivo do despejado ja ausente: o despejo segue
-    setup();
-    fs.rmSync(path.join(THUMBS, `${perfil(3)}.svg`));
-    const r2 = await profiles.createProfile({ nickname: 'Sexto' });
-    assert.equal(r2.evicted.id, perfil(3));
-
-    // falha ao apagar (um diretorio com o nome do arquivo): so o log; o perfil
-    // novo e criado
-    setup();
-    fs.rmSync(path.join(THUMBS, `${perfil(3)}.svg`));
-    fs.mkdirSync(path.join(THUMBS, `${perfil(3)}.svg`));
-    const logs = [];
-    const quiet = console.error;
-    console.error = (...a) => logs.push(a.join(' '));
-    try {
-        const r3 = await profiles.createProfile({ nickname: 'Sexto' });
-        assert.equal(r3.evicted.id, perfil(3));
-        assert.ok(fs.existsSync(path.join(THUMBS, r3.user.avatar)));
-    } finally { console.error = quiet; }
-    assert.ok(logs.some(l => l.includes(perfil(3)) && /arquivo do avatar ficou/.test(l)), logs.join(' | '));
+test('G8: o sexto perfil recusado nao grava arquivo de avatar; POST /profile/create responde 400 com a mensagem', async () => {
+    store.clear();
+    fcalls.length = 0;
+    fs.rmSync(THUMBS, { recursive: true, force: true });
+    fs.mkdirSync(THUMBS, { recursive: true });
+    const idx = new Set();
+    for (let i = 1; i <= 5; i++) {
+        idx.add(perfil(i));
+        store.set(`user:${perfil(i)}`, { nickname: `P${i}`, avatar: `${perfil(i)}.svg`, lastAccess: String(1000 + i) });
+        fs.writeFileSync(path.join(THUMBS, `${perfil(i)}.svg`), DEFAULT_AVATAR_SVG);
+    }
+    store.set('users:index', idx);
+    const antes = thumbFiles();
+    await withApp(app => app.use('/profile', managerRouter), async base => {
+        const r = await fetch(`${base}/profile/create`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nickname: 'Sexto' }),
+        });
+        assert.equal(r.status, 400);
+        assert.match((await r.json()).error, /limite de 5 perfis/);
+    });
+    assert.deepEqual(thumbFiles(), antes);
+    assert.deepEqual(fcalls, []);
 });
 
 test('platformErrorHandler: excecao em rota async vira 404 {error:200}', async () => {

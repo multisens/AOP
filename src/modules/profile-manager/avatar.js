@@ -16,10 +16,10 @@
 //   diretorio, sem subdiretorio);
 // - ausente: o avatar padrao de cada tela.
 // O gestor de perfis grava o arquivo como <id do perfil>.svg ao criar o
-// perfil (service.js, createProfile) e o apaga no despejo (P3).
+// perfil (service.js, createProfile) e o apaga se o perfil nao for gravado.
 const fs = require('fs');
 const path = require('path');
-const { svgDocument, svgDataUri, imageHtml } = require('../../html');
+const { svgDocument, withSvgNamespace, svgDataUri, imageHtml } = require('../../html');
 
 function svgAvatar(hex) {
     return '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
@@ -71,13 +71,13 @@ function avatarFileName(id) {
     return `${id}.svg`;
 }
 
-// SVG do POST /profile/create conferido como as telas ja conferiam (texto que
-// comeca por "<svg" e tem elemento <svg>; ver ../../html.js, svgDocument);
-// ausente ou fora disso, o padrao — como antes, quando o que nao era SVG
-// aparecia como o padrao. O documento gravado leva o xmlns (o arquivo e
-// entregue como image/svg+xml pela C.6.14.6).
+// SVG do POST /profile/create: texto que comeca por "<svg" e tem elemento
+// <svg>; ausente ou fora disso, o padrao — como antes, quando o que nao era
+// SVG aparecia como o padrao. O documento gravado leva o xmlns (G7, Joel
+// 15/10: o AoP grava o avatar com ele; o arquivo e entregue como
+// image/svg+xml pela C.6.14.6; ver ../../html.js, withSvgNamespace).
 function avatarSvg(value) {
-    const doc = typeof value === 'string' && value.startsWith('<svg') ? svgDocument(value) : '';
+    const doc = typeof value === 'string' && value.startsWith('<svg') ? withSvgNamespace(value) : '';
     return doc || svgDocument(DEFAULT_AVATAR_SVG);
 }
 
@@ -92,8 +92,7 @@ async function writeAvatarFile(id, svg) {
     return name;
 }
 
-// Apaga <thumbs>/<id>.svg (despejo, P3, ou criacao que falhou depois de gravar
-// o arquivo). Arquivo ausente nao e erro (devolve false). So o arquivo que o
+// Apaga <thumbs>/<id>.svg (criacao que falhou depois de gravar o arquivo). Arquivo ausente nao e erro (devolve false). So o arquivo que o
 // gestor grava para o perfil: um avatar com outro nome nao foi posto por ele e
 // fica.
 async function removeAvatarFile(id) {
@@ -147,7 +146,7 @@ function avatarDataUri(name) {
 //   <img>, nao roda;
 // - as telas ja mostravam o avatar como <img src=data:> (mesma caixa, mesmas
 //   conferencias de escape).
-// Custo: leitura sincrona do arquivo a cada tela (ate cinco perfis, P3).
+// Custo: leitura sincrona do arquivo a cada tela (ate cinco perfis).
 // Desde G8, o SVG em linha no campo (perfis gravados antes) esta fora do
 // formato e aparece como o padrao.
 function avatarHtml(avatar) {

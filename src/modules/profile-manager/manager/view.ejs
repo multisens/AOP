@@ -718,12 +718,7 @@
                     const msg = typeof data.error === 'string' ? data.error : data.description;
                     throw new Error(msg || ('HTTP ' + response.status));
                 }
-                if (data.evicted) {
-                    alert('Perfil criado! Como o limite de 5 perfis foi atingido, o perfil "'
-                        + data.evicted.nickname + '" (o de acesso mais antigo) foi removido.');
-                } else {
-                    alert('Perfil criado com sucesso!');
-                }
+                alert('Perfil criado com sucesso!');
                 window.location.href = '/prfchs';
             })
             .catch(error => {

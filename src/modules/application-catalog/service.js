@@ -32,7 +32,7 @@ function cards() {
 
 		html += `<div id="card${i}" class="card" ${move} select="selectService" selectParam="${escapeHtml(lls.bam.globalServiceId)}">` +
 					`<span>${escapeHtml(lls.bam.appName)}</span>` +
-					`<div class="logo">${svgImageHtml(lls.bam.appIcon, { alt: '' })}</div>` +
+					`<div class="logo">${svgImageHtml(lls.bam.appIcon, { alt: '' }, `appIcon do BAM de ${lls.bam.globalServiceId}`)}</div>` +
 				`</div>`;
 		i++;
 	});

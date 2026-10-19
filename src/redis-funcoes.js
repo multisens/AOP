@@ -1,11 +1,11 @@
 // P4 (decisao do Luis em 10/10, "Funcoes + auditoria"): ADAPTADOR UNICO das
 // escritas da plataforma nas familias do alcance (users:index, user:{id},
-// user:{id}:consent, user:{id}:broadcaster-attrs:* no despejo e
+// user:{id}:consent, user:{id}:broadcaster-attrs:* na remocao do perfil e
 // origins:associated). Cada escrita e uma chamada FCALL a uma funcao da
 // biblioteca "tv30" do Redis (infra/redis/funcoes.lua), que confere o esquema
 // (infra/redis/esquema.json, a fonte de verdade) e grava de forma atomica,
 // inclusive as invariantes entre chaves (users:index e user:{id} juntos; o
-// despejo leva as quatro familias do perfil). Esquema invalido = erro do
+// remocao leva as quatro familias do perfil). Esquema invalido = erro do
 // Redis com prefixo TV30ESQUEMA (funcao, chave, campo e motivo) e NADA
 // gravado.
 //
@@ -41,9 +41,14 @@ async function perfilUltimoAcesso(id, ms) {
     return Number(await fcall('tv30_perfil_ultimo_acesso', [id, ms])) === 1;
 }
 
-// despejo: users:index, user:{id}, user:{id}:consent e todo
+// remocao do perfil: users:index, user:{id}, user:{id}:consent e todo
 // user:{id}:broadcaster-attrs:* numa operacao so (antes: SREM, DEL, KEYS e DEL
-// avulsos). Devolve o numero de chaves e membros removidos.
+// avulsos). E4 (Joel, 15/10): a familia dos atributos de emissora tem dois
+// escritores; o tv3ws grava, e a plataforma a remove aqui, na mesma funcao
+// que remove o perfil. Sem chamador desde 15/10: o despejo do sexto perfil
+// saiu (service.js), e a remocao pelo telespectador, com confirmacao
+// explicita (Issue 95, PRFFR-07), ainda nao existe. Devolve o numero de
+// chaves e membros removidos.
 async function perfilRemove(id) {
     return Number(await fcall('tv30_perfil_remove', [id]));
 }

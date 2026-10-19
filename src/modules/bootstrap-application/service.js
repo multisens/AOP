@@ -17,9 +17,11 @@ const { escapeHtml, svgImageHtml, cssHexColor } = require('../../html');
 //   rgb(200, 200, 200): application-catalog/view.ejs), a mesma do BAM das
 //   amostras do bcast; o genero, sem cor (transparente), como ja ficava sem
 //   ESG.
-// PENDENTE (Joel): a cor do genero (esg.Service.Genre.color) nao esta na
-// ABNT NBR 25608 (nenhuma tabela dela define o campo); aceita-se #RRGGBB e
-// #RRGGBBAA, o formato que o bcast publica hoje ("#07812cff").
+// DECIDIDO (Joel, 15/10; G5): a cor do genero (esg.Service.Genre.color) e
+// campo do testbed, do formato provisorio de SLS (na ABNT NBR 25602, o Genre
+// so tem o href, sem cor). Enquanto o formato provisorio existir, aceita-se
+// #RRGGBB e #RRGGBBAA, o que o bcast publica hoje ("#07812cff"); quando o
+// simulador adotar o formato da A/332, o campo sai.
 const DEFAULT_BACKGROUND_COLOR = '#282828';
 const DEFAULT_FOREGROUND_COLOR = '#c8c8c8';
 const DEFAULT_GENRE_COLOR = 'transparent';
@@ -50,7 +52,7 @@ function bootstrapAppData() {
 	// para <%= %>, que escapa.
 	return {
 		appName: bam.appName,
-		appIconHtml: svgImageHtml(bam.appIcon, { alt: '' }),
+		appIconHtml: svgImageHtml(bam.appIcon, { alt: '' }, `appIcon do BAM de ${bam.globalServiceId}`),
 		appDescription: bam.appDescription || '',
 		backgroundColor: cssHexColor(bam.backgroundColor, DEFAULT_BACKGROUND_COLOR),
 		foregroundColor: cssHexColor(bam.foregroundColor, DEFAULT_FOREGROUND_COLOR)

@@ -22,7 +22,11 @@ const APPS = appHosts.appsConfig();
 // que o navegador manda no Origin das chamadas dela, porque a camada grafica
 // a abre nesse host (antes: o alvo do proxy, http://bcast:8081, que nenhum
 // navegador mandava, e as aplicacoes nao eram reconhecidas como associadas).
-// O valor e o id do servico corrente (o mesmo de antes).
+// O valor e o id do servico corrente (o globalServiceId do BAM): desde 15/10
+// a borda o compara com o contexto de servico do caminho (H1, Joel), e a app
+// so dispensa o bind-token no proprio contexto. Sem servico corrente a origem
+// nao e registrada (ate 15/10 ia o literal 'current-service', que a H1 leria
+// como servico nenhum).
 // D-0510-6 (reuniao 05/10 com o Joel): registro e remocao devolvem a
 // promessa (antes: .catch que so logava); quem chama de rota HTTP espera e a
 // falha vira 404 {error:200}; quem chama de handler MQTT loga.
@@ -30,7 +34,8 @@ const ORIGINS_KEY = 'origins:associated';
 whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => funcoes.origensLimpa());
 
 function registerAssociatedOrigin(origin) {
-    const scid = DATA.currentService || 'current-service';
+    const scid = DATA.currentService;
+    if (!scid) return Promise.reject(new Error(`sem servico corrente: a origem ${origin} nao foi registrada como associada (H1)`));
     return funcoes.origemRegistra(origin, scid).then(() => origin);
 }
 
@@ -225,7 +230,7 @@ async function loadUserData(attempt = 1) {
 }
 
 // D-0510-5 (reuniao 05/10 com o Joel): a plataforma, dona dos perfis, grava
-// o lastAccess (despejo P3) em toda troca de usuario corrente — a feita aqui
+// o lastAccess em toda troca de usuario corrente — a feita aqui
 // (setCurrentUser) e a que chega por aop/currentUser vinda de outro
 // componente (C.6.14.4 no tv3ws). O eco da propria publicacao chega com o
 // mesmo valor e e ignorado. O retido recebido no boot conta como acesso, como
