@@ -5,9 +5,8 @@ const express = require('express');
 const path = require('path');
 const router = express.Router();
 
-// A pagina conecta o MQTT por WebSocket na propria origem, em /mqtt (C1,
-// decisao do Luis em 11/10; ../../mqtt-ws.js): nao recebe mais host nem
-// porta do broker.
+// A pagina conecta o MQTT na propria origem, em /mqtt (../../mqtt-ws.js): a
+// view nao recebe host nem porta do broker.
 router.get('/', async (req, res) => {
     const html = await ejs.renderFile(path.join(__dirname, 'view.ejs'), {});
     res.send(html);
@@ -25,8 +24,7 @@ router.get('/keydown/:keyCode', async (req, res) => {
     }
 
     if (['27', '93'].includes(req.params.keyCode)) {
-        // espera a remocao da origem associada; falha do Redis -> 404
-        // {error:200} (D-0510-6)
+        // espera a remocao da origem associada; falha do Redis -> 404 {error:200}
         await core.openServiceInfo();
     }
     else if (req.params.keyCode == '33') {

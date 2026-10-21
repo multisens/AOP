@@ -1,13 +1,6 @@
-// Injecao de HTML nas telas do AoP fora dos pop-ups (correcao de 12/10,
-// spec-1210-seguranca2, item 2): catalogo de aplicacoes, aplicacao de
-// abertura e escolha de perfil, pelos routers e views REAIS, com o core do
-// AoP trocado por um duble (sem MQTT nem Redis). Antes, appName, appIcon e
-// globalServiceId do BAM (emissora, MQTT) e nickname e avatar do perfil (POST
-// /profile/create) iam crus para o HTML exibido com <%- %>: o script deles
-// rodava na tela da TV (medido no Chrome 154,
-// scratchpad/seguranca2-1210/chrome-views.js). Agora: texto e atributo
-// escapados; SVG (appIcon, avatar) como <img> com URL data:, onde o
-// navegador nao roda script.
+// Injecao de HTML nas telas do AoP fora dos pop-ups (catalogo, aplicacao de
+// abertura, escolha de perfil), pelos routers e views REAIS com o core trocado
+// por um duble: texto e atributo escapados; SVG so como <img> com URL data:.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
@@ -18,10 +11,9 @@ const { escapeHtml, svgDataUri, svgImageHtml, svgProblem, withSvgNamespace, SVG_
 
 // --- dados -----------------------------------------------------------------------
 const INJ = tag => `window.__injetado=(window.__injetado||[]).concat('${tag}')`;
-// amostra sem xmlns, como tres das quatro do bcast (uff, webmedia, eduplay)
-// amostra como as do bcast depois da G7 (Joel, 15/10): com o xmlns do SVG
+// amostra como as do bcast: com o xmlns do SVG
 const SAMPLE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 95" style="fill:#003461" preserveAspectRatio="xMidYMid meet"><path d="M0 0h10v10z"/></svg>';
-// e como eram ate 15/10: sem o namespace (o AoP acrescentava; agora recusa)
+// sem o namespace: recusado
 const ICON_NO_NS = '<svg viewBox="0 0 180 95"><path d="M0 0h10v10z"/></svg>';
 const HOSTILE = {
     globalServiceId: `urn:hostil" onfocus="${INJ('gsid')}" autofocus tabindex="1`,
@@ -31,8 +23,8 @@ const HOSTILE = {
 };
 const SAMPLE = { globalServiceId: 'urn:amostra:uff', appName: 'UFF TV', appIcon: SAMPLE_ICON, appDescription: 'A TV', backgroundColor: '#282828', foregroundColor: '#c8c8c8' };
 const HOSTILE_AVATAR = `<svg xmlns="${SVG_NS}" viewBox="0 0 100 100" onload="${INJ('avatar')}"><script>${INJ('avatar-script')}</script></svg>`;
-// G8 (decisao do Luis em 12/10): o campo avatar e o nome de um arquivo de
-// <USER_DATA_PATH>/thumbs; o SVG hostil mora no arquivo hostil.svg
+// o campo avatar nomeia um arquivo de <USER_DATA_PATH>/thumbs; o SVG hostil
+// mora em hostil.svg
 const fs = require('fs');
 const os = require('os');
 const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'aop-views-'));
@@ -105,7 +97,7 @@ test('escapeHtml: & < > " \' escapados; nulo vira vazio', () => {
     assert.equal(escapeHtml(42), '42');
 });
 
-test('svgDataUri (G7, Joel 15/10): so SVG no namespace do SVG; sem xmlns, ou com outro, recusado (vazio)', () => {
+test('svgDataUri: so SVG no namespace do SVG; sem xmlns, ou com outro, recusado (vazio)', () => {
     assert.equal(decode(svgDataUri(SAMPLE_ICON)), SAMPLE_ICON);
     const withNs = `<svg xmlns='${SVG_NS}' viewBox="0 0 1 1"/>`;
     assert.equal(decode(svgDataUri(withNs)), withNs);
@@ -122,13 +114,13 @@ test('svgDataUri (G7, Joel 15/10): so SVG no namespace do SVG; sem xmlns, ou com
     }
 });
 
-test('withSvgNamespace (G7): o SVG que o proprio AoP grava (avatar) ganha o xmlns quando falta', () => {
+test('withSvgNamespace: o SVG que o proprio AoP grava (avatar) ganha o xmlns quando falta', () => {
     assert.equal(withSvgNamespace(ICON_NO_NS), ICON_NO_NS.replace('<svg ', `<svg xmlns="${SVG_NS}" `));
     assert.equal(withSvgNamespace(SAMPLE_ICON), SAMPLE_ICON);
     assert.equal(withSvgNamespace('<img src=x>'), '');
 });
 
-test('svgImageHtml (G7): icone recusado nao e exibido e sai no log com o motivo, uma vez', () => {
+test('svgImageHtml: icone recusado nao e exibido e sai no log com o motivo, uma vez', () => {
     const avisos = [];
     const original = console.warn;
     console.warn = m => avisos.push(String(m));
@@ -188,10 +180,8 @@ test('escolha de perfil (/prfchs): nickname e id escapados; avatares como <img> 
     assert.ok(srcs.includes(DEFAULT_AVATAR_SVG), 'perfil sem avatar: o padrao, em <img>');
 });
 
-// G8 (decisao do Luis em 12/10): avatarHtml le o arquivo nomeado no campo
-// (<USER_DATA_PATH>/thumbs/<nome>) e o embute em <img src=data:> com o tipo
-// pela extensao; sem arquivo ou fora do formato do contrato, o padrao. O SVG
-// em linha no campo (perfis de antes) esta fora do formato.
+// avatarHtml embute o arquivo nomeado no campo em <img src=data:>, com o tipo
+// pela extensao; sem arquivo ou fora do formato (SVG em linha inclusive), o padrao.
 test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">; SVG em linha e nome fora do formato caem no padrao', () => {
     const { avatarHtml, DEFAULT_AVATAR_SVG, AVATAR_COLORS, MAX_AVATAR_BYTES } = require('../src/modules/profile-manager/avatar');
     const only = html => {
@@ -206,9 +196,8 @@ test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">;
     put('cor.svg', AVATAR_COLORS[2].svg);
     assert.equal(svgOf(avatarHtml('cor.svg')), AVATAR_COLORS[2].svg);
     assert.equal(svgOf(avatarHtml('hostil.svg')), HOSTILE_AVATAR);
-    // SVG sem xmlns no arquivo (que o AoP nao gravou: ele grava com o xmlns,
-    // G7): recusado como o icone do BAM, e vale o padrao. Ate 15/10 o
-    // namespace era acrescentado na leitura.
+    // SVG sem xmlns no arquivo (o AoP grava com ele): recusado como o icone do
+    // BAM, vale o padrao
     put('sem-ns.svg', '<svg viewBox="0 0 1 1"/>');
     assert.equal(svgOf(avatarHtml('sem-ns.svg')), DEFAULT_AVATAR_SVG);
     // outras extensoes do contrato: tipo pela extensao, bytes intactos
@@ -218,8 +207,8 @@ test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">;
         assert.equal(only(avatarHtml(name)), `data:${mime};base64,${bytes.toString('base64')}`, name);
     }
 
-    // o padrao: ausente, SVG em linha (antes de G8), nome fora do formato,
-    // arquivo inexistente, SVG sem <svg>, diretorio, acima do teto
+    // o padrao: ausente, SVG em linha, nome fora do formato, arquivo
+    // inexistente, SVG sem <svg>, diretorio, acima do teto
     put('vazio.svg', 'nao e svg');
     put('grande.svg', `<svg xmlns="${SVG_NS}">${' '.repeat(MAX_AVATAR_BYTES)}</svg>`);
     fs.mkdirSync(path.join(THUMBS, 'pasta.svg'));
@@ -245,14 +234,10 @@ test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">;
     if (linked) assert.equal(svgOf(avatarHtml('link.svg')), DEFAULT_AVATAR_SVG, 'link para fora');
 });
 
-// --- 12/10 (spec-1210-defeitos3, itens 4 e 5) -----------------------------------
-// Item 4: backgroundColor/foregroundColor do BAM e a cor do genero do ESG iam
-// para o <style> da aplicacao de abertura so com o escape de HTML do <%= %>,
-// que nao impede CSS ("red; } body { ... }" reescrevia a tela). Agora: BAM so
-// #RRGGBB (Tabela 6), genero #RRGGBB ou #RRGGBBAA (o que o bcast publica);
-// fora disso, o padrao da view.
-// Item 5: selectService/selectProfile montavam ?id= sem encodeURIComponent: um
-// globalServiceId com "&", "#", "+" ou "%" chegava cortado ou trocado.
+// --- cores no <style> e id na query --------------------------------------------
+// O escape de HTML do <%= %> nao impede CSS: BAM so #RRGGBB (Tabela 6), genero
+// #RRGGBB ou #RRGGBBAA; fora disso, o padrao da view. selectService e
+// selectProfile codificam o ?id= ("&", "#", "+" ou "%" cortariam o id).
 const { cssHexColor } = require('../src/html');
 const vm = require('vm');
 
@@ -301,7 +286,7 @@ test('aplicacao de abertura (/btpapp): cor do BAM ou do genero fora do formato n
             assert.deepEqual([v.bg, v.fg, v.genre], expected, what);
             assert.ok(!/atacante|display: none|--x:|--y:/.test(v.style), `CSS injetado no <style>: ${what}`);
         }
-        // sem ESG: genero transparente (antes, vazio: tambem sem cor)
+        // sem ESG: genero transparente
         fakeCore.getServiceSLS = () => ({});
         assert.equal(styleVars(await page('/btpapp')).genre, 'transparent');
     } finally {

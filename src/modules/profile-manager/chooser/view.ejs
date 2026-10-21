@@ -4,7 +4,7 @@
         <link rel="stylesheet" href="/css/all.css">
         <style>
             :root {
-                --base-size: 1vw; /* Unidade base baseada na largura da viewport */
+                --base-size: 1vw;
             }
 
             body {
@@ -99,7 +99,6 @@
         </div>
     
         <script>
-            // Avatar padrao injetado pelo modulo unico (avatar.js — M1)
             const DEFAULT_AVATAR_SVG = <%- JSON.stringify(defaultAvatar) %>;
 
             function setDefaultAvatar(el) {
@@ -112,7 +111,6 @@
                 fetch('<%= basepath %>/create');
             }
 
-            // id codificado na query (12/10, spec-1210-defeitos3 item 5)
             function selectProfile(uid) {
                 fetch(`<%= basepath %>/select?id=${encodeURIComponent(uid)}`);
             }

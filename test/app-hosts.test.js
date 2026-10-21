@@ -1,15 +1,6 @@
-// Testes de unidade do P1.3 (decisao do Luis em 10/10): cada aplicacao de
-// emissora na sua propria origem, http://<app>.<APPS_DOMAIN>:<porta do AoP>.
-// - rotulo DNS, origem e leitura do cabecalho Host (src/app-hosts.js);
-// - registro da origem PROPRIA em origins:associated ao lancar e remocao ao
-//   encerrar (src/core.js, com MQTT e Redis dubles), e a URL que a camada
-//   grafica recebe;
-// - roteamento por Host: proxy para a aplicacao em execucao, 404 para rotulo
-//   sem aplicacao, paginas do AoP intactas, e o caminho antigo
-//   /graphicsAppProxy no host do AoP redirecionando (302) para o host da
-//   aplicacao (decisao do Luis em 11/10), e o prefixo /graphicsAppProxy
-//   opcional no host da aplicacao.
-// Sem Redis, MQTT nem bcast de verdade: o "bcast" e um servidor HTTP local.
+// Testes de src/app-hosts.js e do registro da origem em src/core.js (MQTT e
+// Redis dubles): rotulo, origem, Host, origins:associated, proxy por Host e
+// redirecionamento de /graphicsAppProxy. O "bcast" e um servidor HTTP local.
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
@@ -18,7 +9,7 @@ const Module = require('module');
 const { EventEmitter } = require('events');
 const express = require('express');
 
-// configuracao fixa, antes de carregar o core (que a le uma vez)
+// configuracao fixa: o core a le uma vez, ao carregar
 process.env.APPS_DOMAIN = 'apps.localhost';
 process.env.AOP_PUBLIC_PORT = '8080';
 
@@ -35,10 +26,9 @@ const fakeRedis = {
     once() {},
     on() {},
 };
-// P4 (Luis, 10/10): a plataforma grava pelas funcoes do Redis
-// (src/redis-funcoes.js -> call('FCALL', funcao, 0, ...)). O duble imita o
-// EFEITO das funcoes de origem (sem conferir o esquema: isso e testado no
-// Redis real, infra/redis/test); o lastAccess de perfil desconhecido da 0.
+// O duble imita o EFEITO das funcoes de origem (call('FCALL', funcao, 0, ...)),
+// sem conferir o esquema (testado no Redis real, infra/redis/test); o lastAccess
+// de perfil desconhecido da 0.
 const ORIGENS = 'origins:associated';
 let recusa = null;   // [funcao, mensagem]: a funcao responde como a dado fora do esquema
 for (const [name, fn] of Object.entries({
@@ -225,7 +215,7 @@ test('lancamento pela BALD: registra a origem PROPRIA da aplicacao (nao o alvo d
     assert.equal(lastGraphics(), `${origin}/graphicsAppProxy/users-test`);
     assert.equal(core.getGraphicsAppByLabel('urn-tv30-app-k1a2b3').target, 'http://bcast:8081');
     assert.equal(core.getGraphicsAppByLabel('outra'), null);
-    assert.equal(core.getGraphicsApp().origin, origin);   // destino do redirecionamento do caminho antigo
+    assert.equal(core.getGraphicsApp().origin, origin);   // destino do redirecionamento de /graphicsAppProxy
 });
 
 test('troca de aplicacao: remove a origem anterior e registra a nova; relancar a mesma nao a remove', async () => {
@@ -239,7 +229,7 @@ test('troca de aplicacao: remove a origem anterior e registra a nova; relancar a
     assert.deepEqual(origins(), { 'http://urn-tv30-app-w9.apps.localhost:8080': SID });
 });
 
-test('P4: registro e remocao da origem saem pelas funcoes do Redis (tv30_origem_*), na ordem remove-registra', async () => {
+test('registro e remocao da origem saem pelas funcoes do Redis (tv30_origem_*), na ordem remove-registra', async () => {
     writes.length = 0;
     await core.setDisplayGraphics('http://bcast:8081', '/x', 'urn:tv30:app:p4');
     await core.setDisplayGraphics('http://bcast:8081', '/y', 'urn:tv30:app:p5');
@@ -251,7 +241,7 @@ test('P4: registro e remocao da origem saem pelas funcoes do Redis (tv30_origem_
     ]);
 });
 
-test('P4: registro recusado pela funcao (esquema): o lancamento rejeita com a mensagem (rota HTTP: 404 {error:200})', async () => {
+test('registro recusado pela funcao (esquema): o lancamento rejeita com a mensagem (rota HTTP: 404 {error:200})', async () => {
     const msg = 'TV30ESQUEMA tv30_origem_registra: origins:associated nome de campo: host deve estar em minusculas';
     recusa = ['tv30_origem_registra', msg];
     try {
@@ -279,7 +269,7 @@ test('bcastEntryPackageUrl invalido: nada registrado nem aberto', async () => {
     assert.equal(lastGraphics(), '');
 });
 
-test('Redis fora do ar: o lancamento rejeita (rota HTTP responde 404 {error:200}, D-0510-6)', async () => {
+test('Redis fora do ar: o lancamento rejeita (rota HTTP responde 404 {error:200})', async () => {
     down = true;
     try {
         await assert.rejects(core.setDisplayGraphics('http://bcast:8081', '/x', 'urn:tv30:app:r'), { message: FAIL });
@@ -306,8 +296,8 @@ test('host da aplicacao vai ao proxy dela, com corpo intacto; outros hosts segue
             r = await request(port, { host, path: '/' });   // a raiz e da aplicacao, nao a pagina do AoP
             assert.equal(JSON.parse(r.body).url, '/');
 
-            // prefixo /graphicsAppProxy (decisao do Luis em 11/10): opcional no
-            // host da aplicacao; com ele, sai antes de ir ao alvo
+            // prefixo /graphicsAppProxy: opcional no host da aplicacao; com ele,
+            // sai do caminho que vai ao alvo
             r = await request(port, { host, path: '/graphicsAppProxy/users-test?x=1' });
             assert.equal(r.status, 200);
             assert.equal(JSON.parse(r.body).url, '/users-test?x=1');
@@ -339,7 +329,7 @@ test('host da aplicacao vai ao proxy dela, com corpo intacto; outros hosts segue
     } finally { await close(bcast); }
 });
 
-test('caminho antigo /graphicsAppProxy no host do AoP: 302 para o host da aplicacao, sem gravar origem', async () => {
+test('/graphicsAppProxy no host do AoP: 302 para o host da aplicacao, sem gravar origem', async () => {
     const bcast = await fakeBcast();
     try {
         await core.setDisplayGraphics(`http://127.0.0.1:${bcast.address().port}`, '/users-test', 'urn:tv30:app:l1');
@@ -363,7 +353,7 @@ test('caminho antigo /graphicsAppProxy no host do AoP: 302 para o host da aplica
     }
 });
 
-test('aplicacao fora do ar: host dela responde 502; sem aplicacao, o caminho antigo responde 404', async () => {
+test('aplicacao fora do ar: host dela responde 502; sem aplicacao, /graphicsAppProxy no host do AoP responde 404', async () => {
     const bcast = await fakeBcast();
     const port0 = bcast.address().port;
     await close(bcast);   // porta fechada

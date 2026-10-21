@@ -7,35 +7,19 @@ const { whenReady } = require('./redis-options');
 const profiles = require('./modules/profile-manager/service');
 const appHosts = require('./app-hosts');
 
-// P1.3 (decisao do Luis em 10/10): cada aplicacao de emissora abre na sua
-// propria origem, http://<rotulo>.<APPS_DOMAIN>:<AOP_PUBLIC_PORT> (ver
-// ./app-hosts.js). Configuracao lida uma vez; o server.js ja a validou no
-// boot.
+// Origem propria de cada aplicacao (./app-hosts.js); o server.js ja a validou.
 const APPS = appHosts.appsConfig();
 
-// Lista de origens de aplicacoes associadas (P1): escrita pela plataforma,
-// limpa no boot para que parada anormal nao deixe entrada orfa. P4 (Luis,
-// 10/10): registro, remocao e limpeza passam pelas funcoes do Redis
-// (./redis-funcoes.js), que conferem o esquema da origem (como o navegador a
-// manda no Origin: esquema e host em minusculas, sem porta padrao).
-// Desde o P1.3, o registro guarda a origem PROPRIA da aplicacao — a mesma
-// que o navegador manda no Origin das chamadas dela, porque a camada grafica
-// a abre nesse host (antes: o alvo do proxy, http://bcast:8081, que nenhum
-// navegador mandava, e as aplicacoes nao eram reconhecidas como associadas).
-// O valor e o id do servico corrente (o globalServiceId do BAM): desde 15/10
-// a borda o compara com o contexto de servico do caminho (H1, Joel), e a app
-// so dispensa o bind-token no proprio contexto. Sem servico corrente a origem
-// nao e registrada (ate 15/10 ia o literal 'current-service', que a H1 leria
-// como servico nenhum).
-// D-0510-6 (reuniao 05/10 com o Joel): registro e remocao devolvem a
-// promessa (antes: .catch que so logava); quem chama de rota HTTP espera e a
-// falha vira 404 {error:200}; quem chama de handler MQTT loga.
+// origins:associated: origem da aplicacao em execucao (a que o navegador manda
+// no Origin das chamadas dela, nao o alvo do proxy) -> globalServiceId corrente,
+// que a borda compara com o contexto de servico do caminho: a aplicacao so
+// dispensa o bind-token no proprio contexto. Limpa no boot (sem entrada orfa).
 const ORIGINS_KEY = 'origins:associated';
 whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => funcoes.origensLimpa());
 
 function registerAssociatedOrigin(origin) {
     const scid = DATA.currentService;
-    if (!scid) return Promise.reject(new Error(`sem servico corrente: a origem ${origin} nao foi registrada como associada (H1)`));
+    if (!scid) return Promise.reject(new Error(`sem servico corrente: a origem ${origin} nao foi registrada como associada`));
     return funcoes.origemRegistra(origin, scid).then(() => origin);
 }
 
@@ -82,10 +66,6 @@ const _t = {
     graphics_layer: 'aop/display/layers/graphics'
 };
 
-// (a assinatura de aop/users saiu em 10/10: ninguem publica o topico — o
-// notifyUsersChanged, que o publicaria, ja tinha saido, sem chamador — e o
-// tv3ws deixou de sincronizar perfis em 05/10, D-0510-5. A carga da lista de
-// perfis segue no connect, abaixo.)
 const _topics = new Map([
     [_t.current_user, loadCurrentUser],
     [_t.current_service, loadCurrentService],
@@ -140,11 +120,9 @@ function setDisplayGui(screen) {
     DATA.rxgui.current = screen;
 }
 
-// A camada grafica e publicada na hora, como antes; a promessa devolvida e a
-// do registro/remocao da origem no armazenamento (D-0510-6).
-// baseUrl = bcastEntryPackageUrl (alvo do proxy), epUrl = bcastEntryPointUrl
-// e appId = appId da entrada da BALD (rotulo do host; sem ele, o id do
-// servico corrente). Sem baseUrl, encerra a aplicacao.
+// baseUrl = bcastEntryPackageUrl (alvo do proxy), epUrl = bcastEntryPointUrl,
+// appId = appId da BALD (rotulo do host; sem ele, o servico corrente). Sem
+// baseUrl, encerra a aplicacao. Publica na hora; a promessa e a do registro.
 function setDisplayGraphics(baseUrl = '', epUrl = '', appId = '') {
     let next = null;
     if (baseUrl !== '') {
@@ -152,7 +130,6 @@ function setDisplayGraphics(baseUrl = '', epUrl = '', appId = '') {
         if (!next) console.error(`[apps] bcastEntryPackageUrl invalido, aplicacao nao aberta: '${baseUrl}'`);
     }
 
-    // registro/remocao no lancamento e encerramento da aplicacao (P1, P1.3)
     const pending = [];
     const prev = DATA.graphicsApp;
     if (prev && (!next || prev.origin !== next.origin)) {
@@ -187,15 +164,9 @@ function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
     }));
 }
 
-// A plataforma le os perfis DIRETO do armazenamento (P1 item 8): o
-// antigo caminho HTTP pela porta do tv3ws entrava sem credencial
-// validada e era o que mantinha a porta do servico alcancavel por fora
-// do gateway (defeito 6). A restricao de divulgacao de C.6.14.1 e para
-// clientes na fronteira da API — o gestor de perfis da plataforma ve
-// todos os perfis por definicao.
-// D-0510-6: falha do Redis REJEITA (antes, falha num perfil virava cartao
-// com o id e a da lista inteira so ia para o log, e a tela do chooser saia
-// com a lista velha). Rotas HTTP usam esta funcao e respondem 404 {error:200}.
+// Perfis lidos direto do armazenamento: a restricao de divulgacao da C.6.14.1
+// vale para clientes da API; o gestor de perfis da plataforma ve todos.
+// Falha do Redis rejeita (rota HTTP: 404 {error:200}).
 async function refreshUserData() {
     const ids = await redis.smembers('users:index');
 
@@ -218,7 +189,7 @@ async function loadUserData(attempt = 1) {
     try {
         await refreshUserData();
     } catch (err) {
-        // Redis pode demorar pra subir. Retry ate 5x com backoff.
+        // Redis pode demorar pra subir: retry, no maximo 5x, com backoff.
         if (attempt < 5) {
             const delay = attempt * 2000;
             console.log(`Falha carregando users do Redis (tentativa ${attempt}/${5}, retry em ${delay}ms): ${err.message}`);
@@ -229,12 +200,9 @@ async function loadUserData(attempt = 1) {
     }
 }
 
-// D-0510-5 (reuniao 05/10 com o Joel): a plataforma, dona dos perfis, grava
-// o lastAccess em toda troca de usuario corrente — a feita aqui
-// (setCurrentUser) e a que chega por aop/currentUser vinda de outro
-// componente (C.6.14.4 no tv3ws). O eco da propria publicacao chega com o
-// mesmo valor e e ignorado. O retido recebido no boot conta como acesso, como
-// fazia o tv3ws.
+// A plataforma grava o lastAccess em toda troca de usuario corrente, inclusive
+// a que chega por aop/currentUser de outro componente (C.6.14.4 no tv3ws). O
+// eco da propria publicacao e ignorado; o retido recebido no boot conta como acesso.
 function loadCurrentUser(message) {
     const uid = message.toString();
     if (uid === DATA.currentUser) return;
@@ -243,8 +211,8 @@ function loadCurrentUser(message) {
         .catch(err => console.error(`[profiles] falha gravando lastAccess de ${uid}: ${err.message}`));
 }
 
-// Grava o lastAccess ANTES de trocar: se o armazenamento falhar, a troca nao
-// acontece e quem chamou recebe o erro (rota: 404 {error:200}).
+// Grava o lastAccess primeiro: se o armazenamento falhar, a troca nao acontece
+// e quem chamou recebe o erro (rota: 404 {error:200}).
 async function setCurrentUser(uid) {
     await profiles.touchLastAccess(uid.toString());
     DATA.currentUser = uid.toString();
@@ -331,7 +299,6 @@ function loadSLSMetadata(meta, topic) {
     if (sls == 'esg') {
         DATA.serviceMetadata.esg = t;
 
-        // refresh the bootstrap app if its open
         if (DATA.rxgui.current == GUI.bootstrap_app) {
             setDisplayGui(GUI.bootstrap_app);
         }
@@ -354,14 +321,12 @@ function setBALDHandler(handler) {
 }
 
 // Aplicacao em execucao na camada grafica ({ appId, label, origin, target })
-// ou null; usada pelo redirecionamento do caminho antigo /graphicsAppProxy no
-// host do AoP (decisao do Luis em 11/10).
+// ou null; usada pelo redirecionamento de /graphicsAppProxy no host do AoP.
 function getGraphicsApp() {
     return DATA.graphicsApp;
 }
 
-// Aplicacao em execucao com este rotulo de host, ou null (roteamento por Host
-// do server.js; P1.3).
+// Aplicacao em execucao com este rotulo de host, ou null (roteamento por Host).
 function getGraphicsAppByLabel(label) {
     return DATA.graphicsApp && DATA.graphicsApp.label === label ? DATA.graphicsApp : null;
 }
@@ -370,11 +335,7 @@ function getVideoStreamURL() {
     return DATA.videoStreamURL;
 }
 
-// (notifyUsersChanged saiu: publicava aop/users para o tv3ws sincronizar o
-// userData.json no Redis, o que o tv3ws nao faz mais — D-0510-5. Nao tinha
-// chamador.)
-
-// Devolve a promessa da remocao da origem associada (D-0510-6).
+// Devolve a promessa da remocao da origem associada.
 function openServiceInfo() {
     if (DATA.rxgui.current == '') {
         setDisplayGui(`${GUI.bootstrap_app}?mode=info`);

@@ -1,9 +1,6 @@
-// Testes de unidade da plataforma (node:test, sem Redis nem MQTT de verdade).
-// Reuniao 05/10 com o Joel:
-// - D-0510-6: cliente Redis que falha rapido e explicito (ioredis REAL contra
-//   porta fechada e contra servidor que aceita e nao responde) e rota que
-//   responde 404 {error:200} em vez de travar ou mascarar a falha;
-// - D-0510-5: a plataforma grava o lastAccess so de perfil existente.
+// Testes de unidade da plataforma (node:test, sem Redis nem MQTT de verdade):
+// cliente Redis que falha rapido (ioredis REAL contra porta fechada e servidor
+// mudo), rotas que respondem 404 {error:200} e gestor de perfis.
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const net = require('net');
@@ -19,16 +16,15 @@ const os = require('os');
 const { FAIL_FAST_OPTIONS, redisOptions, logRedisEvents, whenReady } = require('../src/redis-options');
 const { platformErrorHandler } = require('../src/http-error');
 
-// G8 (decisao do Luis em 12/10): a criacao de perfil grava o arquivo do avatar
-// em <USER_DATA_PATH>/thumbs/<id>.svg. Diretorio temporario
-// por execucao.
+// a criacao de perfil grava o avatar em <USER_DATA_PATH>/thumbs: diretorio
+// temporario por execucao
 const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'aop-user-files-'));
 process.env.USER_DATA_PATH = USER_DATA;
 const THUMBS = path.join(USER_DATA, 'thumbs');
 after(() => fs.rmSync(USER_DATA, { recursive: true, force: true }));
 
-// ids de perfil em UUID (Tabela 7; decisao do Luis em 11/10, F-3): o duble
-// nao confere o esquema, mas os ids sao do formato que o Redis aceita
+// ids de perfil em UUID (Tabela 7): o duble nao confere o esquema, mas os ids
+// sao do formato que o Redis aceita
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const UM = '0b6f3e2a-7c1d-4e5f-9a8b-2c3d4e5f6a7b';
 const perfil = i => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
@@ -38,11 +34,9 @@ const FAIL = 'redis indisponivel (duble de teste)';
 const store = new Map();
 let down = false;
 const setOf = k => (store.get(k) instanceof Set ? store.get(k) : new Set());
-// P4 (Luis, 10/10): o gestor de perfis grava pelas funcoes do Redis
-// (src/redis-funcoes.js -> call('FCALL', funcao, 0, ...)). O duble imita o
-// EFEITO das funcoes de perfil (sem conferir o esquema: isso e testado no
-// Redis real, infra/redis/test); fcalls guarda cada chamada e recusa faz a
-// funcao responder como a dado fora do esquema.
+// O duble imita o EFEITO das funcoes de perfil (call('FCALL', funcao, 0, ...)),
+// sem conferir o esquema (testado no Redis real, infra/redis/test); fcalls
+// guarda cada chamada e recusa faz a funcao responder como a dado fora do esquema.
 const fcalls = [];
 let recusa = null;   // [funcao, mensagem]
 const fakeRedis = new Proxy({
@@ -132,8 +126,8 @@ const realError = console.error;
 console.error = () => undefined;   // o handler loga cada erro; silencia no teste
 after(() => { console.error = realError; });
 
-// --- D-0510-6: cliente ----------------------------------------------------------
-test('opcoes: limite por comando, poucas tentativas, fila offline ligada (antes: maxRetriesPerRequest null)', () => {
+// --- cliente Redis --------------------------------------------------------------
+test('opcoes: limite por comando, poucas tentativas, fila offline ligada', () => {
     const o = redisOptions();
     assert.equal(o.maxRetriesPerRequest, 1);
     assert.ok(o.commandTimeout < 2000);
@@ -200,7 +194,7 @@ test('whenReady: tarefa de boot roda uma vez, no primeiro ready', async () => {
     assert.equal(runs, 1);
 });
 
-// --- D-0510-5: lastAccess -------------------------------------------------------
+// --- lastAccess -----------------------------------------------------------------
 test('touchLastAccess grava so em perfil existente (sem hash fantasma)', async () => {
     store.clear();
     store.set('users:index', new Set([UM]));
@@ -212,7 +206,7 @@ test('touchLastAccess grava so em perfil existente (sem hash fantasma)', async (
     assert.equal(await profiles.touchLastAccess(''), false);
 });
 
-// --- D-0510-6: rota de criacao de perfil ----------------------------------------
+// --- rota de criacao de perfil --------------------------------------------------
 test('POST /profile/create: dado invalido 400; Redis fora 404 {error:200}; ok 201', async () => {
     store.clear();
     await withApp(app => app.use('/profile', managerRouter), async base => {
@@ -240,7 +234,7 @@ test('POST /profile/create: dado invalido 400; Redis fora 404 {error:200}; ok 20
     });
 });
 
-// --- P4 (Luis, 10/10): escritas de perfil pelas funcoes do Redis ------------------
+// --- escritas de perfil pelas funcoes do Redis ----------------------------------
 test('createProfile: UMA chamada tv30_perfil_grava com a visibilidade do servico ativo e a Tabela 7 em texto', async () => {
     store.clear();
     fcalls.length = 0;
@@ -262,17 +256,14 @@ test('createProfile: UMA chamada tv30_perfil_grava com a visibilidade do servico
     assert.equal(h.parentalControl, 'false');
     assert.equal(h.maxContentRating, undefined, 'condicional falso fica fora do hash');
     assert.match(h.lastAccess, /^[1-9]\d*$/);
-    // F-3 (decisao do Luis em 11/10): id em UUID (Tabela 7), formato da RFC
-    // 9562 em minusculas; dois perfis nunca recebem o mesmo
+    // id em UUID (Tabela 7), formato da RFC 9562 em minusculas; dois perfis
+    // nunca recebem o mesmo
     assert.match(user.id, UUID_RE);
     const { user: outro } = await profiles.createProfile({ nickname: 'Outro' });
     assert.match(outro.id, UUID_RE);
     assert.notEqual(outro.id, user.id);
 });
 
-// Joel, 15/10 ("Observacoes sobre pontos fora da lista"): o sexto perfil e
-// recusado, com a mensagem para o formulario, e nenhum perfil e despejado (ate
-// 15/10, P3, o de ultimo acesso mais antigo saia).
 test('limite de cinco: o sexto perfil e recusado (ValidationError), sem despejo nem gravacao', async () => {
     store.clear();
     fcalls.length = 0;
@@ -331,13 +322,11 @@ test('POST /profile/create: idioma ou visibilidade fora do esquema 400 (antes de
     });
 });
 
-// --- G8 (decisao do Luis em 12/10): avatar = nome de arquivo das miniaturas ------
-// Tabela 7: "avatar" e "file path". O gestor grava o SVG do formulario em
-// <USER_DATA_PATH>/thumbs/<id>.svg (o USER_THUMBS do tv3ws, que o entrega pela
-// C.6.14.6) e o campo avatar recebe o nome do arquivo; a criacao que falha apaga o
-// arquivo. Antes, o campo levava o SVG em linha.
+// --- avatar = nome de arquivo das miniaturas (Tabela 7: "file path") ------------
+// O gestor grava o SVG do formulario em <USER_DATA_PATH>/thumbs/<id>.svg e o
+// campo avatar recebe o nome; a criacao que falha apaga o arquivo.
 const { AVATAR_COLORS, DEFAULT_AVATAR_SVG } = require('../src/modules/profile-manager/avatar');
-// formato do contrato (spec-1210-g8g9; o mesmo do esquema do Redis)
+// formato do nome (o mesmo do esquema do Redis)
 const AVATAR_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(svg|png|jpg|jpeg|webp)$/;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // campos do hash na chamada tv30_perfil_grava <id> <n> <consent x n> <campo valor ...>
@@ -350,7 +339,7 @@ const hashOfCall = call => {
 const thumbFiles = () => (fs.existsSync(THUMBS) ? fs.readdirSync(THUMBS).sort() : []);
 const readThumb = name => fs.readFileSync(path.join(THUMBS, name), 'utf8');
 
-test('G8: createProfile grava o SVG do formulario em <thumbs>/<id>.svg e o avatar e o nome do arquivo', async () => {
+test('createProfile grava o SVG do formulario em <thumbs>/<id>.svg e o avatar e o nome do arquivo', async () => {
     store.clear();
     fcalls.length = 0;
     fs.rmSync(THUMBS, { recursive: true, force: true });   // o diretorio e criado se faltar
@@ -377,22 +366,22 @@ test('G8: createProfile grava o SVG do formulario em <thumbs>/<id>.svg e o avata
     });
 });
 
-test('G8: avatar ausente ou que nao e SVG (conferido como as telas conferiam) grava o padrao', async () => {
+test('avatar ausente ou que nao e SVG grava o padrao', async () => {
     for (const avatar of [undefined, null, '', 'a.png', 'c3167a18-5dc5-4a6e-9b1d-3f2a7c5e8d10.svg', '<img src=x onerror=alert(1)>',
         ' <svg viewBox="0 0 1 1"/>', '<svgx>', 42, ['<svg/>']]) {
         store.clear();
         const { user } = await profiles.createProfile({ nickname: 'Padrao', avatar });
         assert.equal(readThumb(user.avatar), DEFAULT_AVATAR_SVG, JSON.stringify(avatar));
     }
-    // SVG hostil passa (como antes, quando ia em linha): as telas o mostram so
-    // dentro de <img> (test/views-escape.test.js)
+    // SVG hostil passa: as telas o mostram so dentro de <img>
+    // (test/views-escape.test.js)
     store.clear();
     const hostil = `<svg xmlns="${SVG_NS}" onload="alert(1)"><script>alert(2)</script></svg>`;
     const { user } = await profiles.createProfile({ nickname: 'Hostil', avatar: hostil });
     assert.equal(readThumb(user.avatar), hostil);
 });
 
-test('G8: perfil recusado pela funcao apaga o arquivo; falha ao gravar o arquivo nao grava o perfil', async () => {
+test('perfil recusado pela funcao apaga o arquivo; falha ao gravar o arquivo nao grava o perfil', async () => {
     store.clear();
     fs.rmSync(THUMBS, { recursive: true, force: true });
     fcalls.length = 0;
@@ -413,7 +402,7 @@ test('G8: perfil recusado pela funcao apaga o arquivo; falha ao gravar o arquivo
     } finally { fs.rmSync(THUMBS, { force: true }); }
 });
 
-test('G8: o sexto perfil recusado nao grava arquivo de avatar; POST /profile/create responde 400 com a mensagem', async () => {
+test('o sexto perfil recusado nao grava arquivo de avatar; POST /profile/create responde 400 com a mensagem', async () => {
     store.clear();
     fcalls.length = 0;
     fs.rmSync(THUMBS, { recursive: true, force: true });

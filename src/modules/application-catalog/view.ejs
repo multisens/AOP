@@ -4,7 +4,7 @@
         <link rel="stylesheet" href="/css/all.css">
         <style>
             :root {
-                --base-size: 1vw; /* Unidade base baseada na largura da viewport */
+                --base-size: 1vw;
             }
 
             body {
@@ -76,9 +76,6 @@
                     margin-right: 0.3vw;
                 }
 
-                /* avatar: <img> com o SVG em URL data: desde 12/10
-                   (spec-1210-seguranca2 item 2; src/html.js), com a mesma
-                   caixa do SVG em linha de antes */
                 img.avatar {
                     width: 100%;
                     height: auto;
@@ -168,9 +165,6 @@
                         height: 100%;
                         overflow: hidden;
                     }
-                    /* icone do BAM: <img> com o SVG em URL data: desde 12/10
-                       (spec-1210-seguranca2 item 2; src/html.js); svg fica
-                       para o caso de SVG em linha */
                     svg, img {
                         max-width: 80%;
                         max-height: 80%;
@@ -242,9 +236,8 @@
                 fetch('<%= basepath %>/profile');
             }
 
-            // id codificado na query (12/10, spec-1210-defeitos3 item 5): o
-            // globalServiceId vem do BAM da emissora, e "&", "#", "+" ou "%"
-            // nele cortavam ou trocavam o id que chega ao /select
+            // o globalServiceId vem da emissora: sem o encodeURIComponent, "&",
+            // "#", "+" ou "%" nele cortariam ou trocariam o id do /select
             function selectService(sid) {
                 fetch(`<%= basepath %>/select?id=${encodeURIComponent(sid)}`);
             }

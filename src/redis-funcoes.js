@@ -1,34 +1,16 @@
-// P4 (decisao do Luis em 10/10, "Funcoes + auditoria"): ADAPTADOR UNICO das
-// escritas da plataforma nas familias do alcance (users:index, user:{id},
-// user:{id}:consent, user:{id}:broadcaster-attrs:* na remocao do perfil e
-// origins:associated). Cada escrita e uma chamada FCALL a uma funcao da
-// biblioteca "tv30" do Redis (infra/redis/funcoes.lua), que confere o esquema
-// (infra/redis/esquema.json, a fonte de verdade) e grava de forma atomica,
-// inclusive as invariantes entre chaves (users:index e user:{id} juntos; o
-// remocao leva as quatro familias do perfil). Esquema invalido = erro do
-// Redis com prefixo TV30ESQUEMA (funcao, chave, campo e motivo) e NADA
-// gravado.
-//
-// Recusa da funcao e defeito do servico: o erro sobe como qualquer falha do
-// Redis — rota HTTP responde 404 {error:200} (platformErrorHandler, que loga a
-// mensagem, ./http-error.js); handler MQTT loga.
-//
-// Fora daqui a plataforma NAO grava no Redis: o teste estatico
-// (test/redis-escritas.test.js, regras em infra/redis/test/escritas.js) falha
-// se outro arquivo de src/ chamar comando de escrita no cliente Redis.
-// As funcoes usam numkeys 0 e derivam as chaves dos argumentos.
+// Unico ponto de escrita da plataforma no Redis (test/redis-escritas.test.js
+// confere): cada escrita e um FCALL a biblioteca "tv30" (infra/redis/funcoes.lua),
+// que confere o esquema e grava atomicamente; recusa = erro TV30ESQUEMA, nada gravado.
 const redis = require('./redis-client');
 
+// numkeys 0: as funcoes derivam as chaves dos argumentos
 function fcall(nome, args) {
     return redis.call('FCALL', nome, 0, ...args.map(String));
 }
 
-// campo, valor, campo, valor... (ordem estavel)
 function pares(campos) {
     return Object.keys(campos).sort().flatMap(k => [k, String(campos[k])]);
 }
-
-// --- perfis (gestor de perfis, P3) ---
 
 // users:index + user:{id} regravado inteiro + servicos acrescentados a
 // user:{id}:consent, numa operacao so
@@ -42,18 +24,12 @@ async function perfilUltimoAcesso(id, ms) {
 }
 
 // remocao do perfil: users:index, user:{id}, user:{id}:consent e todo
-// user:{id}:broadcaster-attrs:* numa operacao so (antes: SREM, DEL, KEYS e DEL
-// avulsos). E4 (Joel, 15/10): a familia dos atributos de emissora tem dois
-// escritores; o tv3ws grava, e a plataforma a remove aqui, na mesma funcao
-// que remove o perfil. Sem chamador desde 15/10: o despejo do sexto perfil
-// saiu (service.js), e a remocao pelo telespectador, com confirmacao
-// explicita (Issue 95, PRFFR-07), ainda nao existe. Devolve o numero de
+// user:{id}:broadcaster-attrs:* (gravados pelo tv3ws) numa operacao so. Sem
+// chamador: a remocao pelo telespectador ainda nao existe. Devolve o numero de
 // chaves e membros removidos.
 async function perfilRemove(id) {
     return Number(await fcall('tv30_perfil_remove', [id]));
 }
-
-// --- origens das aplicacoes associadas (P1, P1.3) ---
 
 function origemRegistra(origem, servico) {
     return fcall('tv30_origem_registra', [origem, servico]);

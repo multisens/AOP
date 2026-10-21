@@ -1,36 +1,15 @@
-// MQTT por WebSocket na porta do proprio AoP (C1, decisao do Luis em 11/10).
-//
-// A pagina da TV (modules/graphic-overlays/view.ejs) conectava direto no
-// WebSocket do mosquitto, na 9001 do host, que era porta fixa. Desde a decisao
-// do Luis em 11/10 a 9001 do mosquitto sai numa porta de host aleatoria
-// (MQTT_WS_PUBLISH no infra/docker-compose.yml), e a pagina conecta na propria
-// origem: ws(s)://<host da pagina>/mqtt. O AoP atende esse upgrade WebSocket e
-// o repassa a ws://${MQTT_HOST}:${MQTT_WS_PORT} (padrao 9001). No compose,
-// MQTT_WS_PORT e a porta INTERNA do mosquitto (9001, na ginga_net); com o AoP
-// no host (desenvolvimento), MQTT_HOST=127.0.0.1 e MQTT_WS_PORT e a porta
-// publicada (docker compose port mosquitto 9001). O caminho /mqtt segue como
-// esta para o mosquitto, o mesmo que a pagina pedia a ele antes.
-//
-// So no host do AoP, nunca num host de aplicacao (<app>.<APPS_DOMAIN>, P1.3,
-// ./app-hosts.js): ali o upgrade em /mqtt responde 404, e a aplicacao de
-// emissora nao alcanca o broker pela origem dela. Qualquer outro upgrade
-// (outro caminho no host do AoP, qualquer caminho num host de aplicacao)
-// tambem responde 404. Antes deste modulo o AoP nao atendia upgrade WebSocket
-// nenhum (sem ouvinte de 'upgrade', o Node entrega o pedido como requisicao
-// comum ao Express).
-//
-// Norma x testbed: MQTT, o broker e este repasse sao decisoes deste testbed;
-// a ABNT NBR 25608 nao trata deles.
+// A pagina da TV conecta o MQTT em ws(s)://<host da pagina>/mqtt e o AoP repassa o
+// upgrade, com o caminho intacto, a ws://${MQTT_HOST}:${MQTT_WS_PORT}. Num host de
+// aplicacao, 404: a aplicacao de emissora nao alcanca o broker pela origem dela.
+// MQTT, broker e este repasse sao escolhas do testbed; a ABNT NBR 25608 nao os trata.
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { hostLabel } = require('./app-hosts');
 
 const MQTT_WS_PATH = '/mqtt';
 const DEFAULT_MQTT_WS_PORT = 9001;
 
-// Alvo do repasse: ws://${MQTT_HOST}:${MQTT_WS_PORT}. Valor invalido lanca
-// erro (o server.js encerra o boot com a mensagem, como AOP_PUBLIC_PORT).
-// MQTT_WS_PORT vazio vale o padrao. MQTT_HOST e so o nome ou IP do broker:
-// com porta ou caminho, o alvo sairia errado em silencio.
+// Valor invalido lanca erro; MQTT_WS_PORT vazio vale o padrao. MQTT_HOST e so o
+// nome ou IP do broker: com porta ou caminho, o alvo sairia errado em silencio.
 function mqttWsConfig(env = process.env) {
     const host = String(env.MQTT_HOST || '').trim();
     const rawPort = String(env.MQTT_WS_PORT || DEFAULT_MQTT_WS_PORT).trim();
@@ -52,7 +31,6 @@ function mqttWsConfig(env = process.env) {
     return Object.freeze({ host, port, target: `ws://${url.hostname}:${port}` });
 }
 
-// Caminho do pedido, sem a consulta (null se ilegivel).
 function pathOf(url) {
     try {
         return new URL(url || '/', 'http://aop.invalid').pathname;

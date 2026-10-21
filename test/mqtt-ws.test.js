@@ -1,13 +1,6 @@
-// Testes do MQTT por WebSocket na porta do AoP (C1, decisao do Luis em 11/10;
-// src/mqtt-ws.js): a pagina da TV conecta em ws://<host da pagina>/mqtt e o
-// AoP repassa o upgrade ao WebSocket do broker.
-// - upgrade de verdade (handshake RFC 6455 e quadros nos dois sentidos) contra
-//   um servidor WebSocket local no papel do mosquitto;
-// - o cliente mqtt (o mesmo pacote que a pagina usa) conecta pelo AoP;
-// - host de aplicacao (<app>.<APPS_DOMAIN>, P1.3) e outro caminho: 404, nada
-//   chega ao broker; broker fora do ar: 502;
-// - a pagina (graphic-overlays/view.ejs) conecta na propria origem, em /mqtt.
-// Sem mosquitto de verdade.
+// Testes de src/mqtt-ws.js, sem mosquitto de verdade: upgrade real (RFC 6455)
+// contra um WebSocket local no papel do broker, o cliente mqtt da pagina pelo
+// AoP, 404 em host de aplicacao e em outro caminho, 502 com broker fora do ar.
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');

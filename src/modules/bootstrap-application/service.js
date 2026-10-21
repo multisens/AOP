@@ -1,27 +1,12 @@
 const core = require('../../core');
-// Avatar padrao: fonte unica no gestor de perfis (M1)
 const { avatarHtml } = require('../profile-manager/avatar');
-// escape e icone SVG como imagem (correcao de 12/10, spec-1210-seguranca2,
-// item 2; ver ../../html.js)
 const { escapeHtml, svgImageHtml, cssHexColor } = require('../../html');
 
-// Cores da view (view.ejs, <style>) — correcao de 12/10, spec-1210-defeitos3,
-// item 4: backgroundColor e foregroundColor do BAM e a cor do genero do ESG
-// entravam no <style> so com o escape de HTML, que nao impede CSS
-// ("red; } body { background: url(...) }" reescrevia a tela). Agora so passa
-// o formato; fora dele, o padrao da view.
-// - BAM, Tabela 6 (p. 54; p. 72 do PDF): "Hexadecimal RGB color code with
-//   notation using a leading number sign (#)", EXAMPLE "#00FFFF" -> #RRGGBB
-//   (a tabela nao fala em alpha nem na forma curta #RGB);
-// - padrao: a paleta das outras telas do AoP (fundo rgb(40, 40, 40), texto
-//   rgb(200, 200, 200): application-catalog/view.ejs), a mesma do BAM das
-//   amostras do bcast; o genero, sem cor (transparente), como ja ficava sem
-//   ESG.
-// DECIDIDO (Joel, 15/10; G5): a cor do genero (esg.Service.Genre.color) e
-// campo do testbed, do formato provisorio de SLS (na ABNT NBR 25602, o Genre
-// so tem o href, sem cor). Enquanto o formato provisorio existir, aceita-se
-// #RRGGBB e #RRGGBBAA, o que o bcast publica hoje ("#07812cff"); quando o
-// simulador adotar o formato da A/332, o campo sai.
+// Cores do <style> da view: so passa o formato (cssHexColor); fora dele, a
+// paleta das outras telas do AoP. BAM, Tabela 6: "Hexadecimal RGB color code
+// with notation using a leading number sign (#)" -> #RRGGBB. A cor do genero e
+// campo do formato provisorio de SLS do testbed (na ABNT NBR 25602 o Genre so
+// tem href): #RRGGBB ou #RRGGBBAA, o que o bcast publica ("#07812cff").
 const DEFAULT_BACKGROUND_COLOR = '#282828';
 const DEFAULT_FOREGROUND_COLOR = '#c8c8c8';
 const DEFAULT_GENRE_COLOR = 'transparent';
@@ -46,10 +31,8 @@ function openBootstrapApp(mode) {
 function bootstrapAppData() {
 	let bam = core.getCurrentService().bam;
 	
-	// appIconHtml: o appIcon do BAM (SVG da emissora) como <img> com URL
-	// data:, que a view exibe com <%- %>; antes, o SVG ia em linha e o script
-	// dele rodava (12/10, spec-1210-seguranca2 item 2). Os demais campos vao
-	// para <%= %>, que escapa.
+	// appIconHtml (<img> com URL data:) vai para <%- %>; os demais campos, para
+	// <%= %>, que escapa.
 	return {
 		appName: bam.appName,
 		appIconHtml: svgImageHtml(bam.appIcon, { alt: '' }, `appIcon do BAM de ${bam.globalServiceId}`),
@@ -93,8 +76,8 @@ function closeBootstrapApp(gui) {
 	core.unsetCurrentService();
 }
 
-// Devolve a promessa do registro da origem associada (D-0510-6). Sem BALD
-// ainda, o inicio fica para o handler (MQTT), que loga a falha.
+// Devolve a promessa do registro da origem associada. Sem BALD ainda, o inicio
+// fica para o handler (MQTT), que loga a falha.
 function fullscreen() {
 	core.setDisplayGui('');
 	core.setVideoSize();
@@ -113,12 +96,9 @@ function startApp(bald) {
 	bald.forEach(entryPackage => {
 		if (!entryPackage.controlCode || entryPackage.controlCode == 'AUTOSTART'){
 			if (entryPackage.appType == 'TV30-Ginga-HTML5') {
-				// just load it in the graphics layer
-				// (P1.3: na origem propria da aplicacao; o rotulo do host sai do appId)
 				pending.push(core.setDisplayGraphics(entryPackage.bcastEntryPackageUrl, entryPackage.bcastEntryPointUrl, entryPackage.appId));
 			}
 			else if (entryPackage.appType == 'TV30-Ginga-NCL') {
-				// todo: use ncl component
 			}
 		}
 	});

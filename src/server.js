@@ -1,9 +1,7 @@
 require('dotenv').config();
 
-// Fail-fast: garante que envs obrigatorias estao setadas antes de qualquer
-// inicializacao (MQTT, HTTP server, modules). Se faltar alguma, loga claro
-// e termina com exit 1 — evita erros confusos tarde no boot (ex: cliente
-// MQTT tentando conectar em 'mqtt://undefined').
+// Fail-fast: env obrigatoria ausente encerra o boot (exit 1) logo no inicio,
+// em vez de erro confuso depois (ex: cliente MQTT em 'mqtt://undefined').
 function assertEnv(required) {
     const missing = required.filter(k => !process.env[k] || String(process.env[k]).trim() === '');
     if (missing.length) {
@@ -12,13 +10,9 @@ function assertEnv(required) {
         process.exit(1);
     }
 }
-// A plataforma le perfis e escreve a lista de origens direto no Redis
-// (P1) — o antigo TV3WS_URL/CCWS_URL nao e mais usado.
 assertEnv(['MQTT_HOST', 'USER_DATA_PATH', 'REDIS_HOST']);
 
-// P1.3: dominio das aplicacoes (APPS_DOMAIN, padrao apps.localhost) e porta
-// publica do AoP (AOP_PUBLIC_PORT, padrao PORT ou 8080). Valor invalido
-// encerra o boot, como env obrigatoria ausente.
+// APPS_DOMAIN e AOP_PUBLIC_PORT (./app-hosts.js): valor invalido encerra o boot.
 const appHosts = require('./app-hosts');
 let APPS;
 try {
@@ -28,9 +22,8 @@ try {
     process.exit(1);
 }
 
-// C1 (decisao do Luis em 11/10): o MQTT por WebSocket da pagina da TV entra
-// pela porta do AoP, em /mqtt, e segue para ws://${MQTT_HOST}:${MQTT_WS_PORT}
-// (padrao 9001). Valor invalido encerra o boot. Ver ./mqtt-ws.js.
+// MQTT por WebSocket da pagina da TV: entra pela porta do AoP, em /mqtt, e
+// segue para ws://${MQTT_HOST}:${MQTT_WS_PORT} (./mqtt-ws.js).
 const mqttWs = require('./mqtt-ws');
 let MQTT_WS;
 try {
@@ -45,24 +38,19 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const _PORT = process.env.PORT || 8080;
 
-// start core component
 const core = require('./core');
 
-// import modules routes — nomes alinhados aos identificadores da norma
-// (R2); os CAMINHOS DE URL vem da tabela core.GUI e não mudam aqui.
 const mod_disp = require('./modules/graphic-overlays');
 const mod_prfchs = require('./modules/profile-manager/chooser');
 const mod_prfmngr = require('./modules/profile-manager/manager');
 const mod_appcat = require('./modules/application-catalog');
 const mod_btpapp = require('./modules/bootstrap-application');
 
-// middleware configuration
 const app = express();
 
-// P1.3: host de aplicacao (<rotulo>.<APPS_DOMAIN>) vai ao proxy da aplicacao
-// em execucao com esse rotulo; rotulo sem aplicacao responde 404. Fica
-// ANTES de tudo: um host de aplicacao nunca serve as paginas nem os arquivos
-// do AoP, e o corpo da requisicao chega intacto ao alvo.
+// Host de aplicacao (<rotulo>.<APPS_DOMAIN>) vai ao proxy da aplicacao em
+// execucao; sem aplicacao, 404. Montado primeiro: um host de aplicacao nunca
+// serve as paginas nem os arquivos do AoP, e o corpo chega intacto ao alvo.
 app.use(appHosts.appHostProxy({ cfg: APPS, lookup: core.getGraphicsAppByLabel }));
 console.log(`[apps] aplicacoes de emissora em http://<app>.${APPS.domain}` + (APPS.port === 80 ? '' : `:${APPS.port}`));
 
@@ -72,7 +60,6 @@ app.use(express.static('public'));
 app.set('view engine', 'ejs');
 app.set('views', 'src/views');
 
-// allowing local clients to connect to the server
 app.use(function (req, res, next) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
@@ -80,25 +67,19 @@ app.use(function (req, res, next) {
     next();
 });
 
-// use routes
 app.use(core.GUI.profile_chooser, mod_prfchs);
 app.use('/profile', mod_prfmngr);
 app.use(core.GUI.app_catalogue, mod_appcat);
 app.use(core.GUI.bootstrap_app, mod_btpapp);
 app.use('/', mod_disp);
 
-// Caminho ANTIGO da aplicacao de emissora, na origem do AoP (antes do P1.3,
-// sem reconhecimento como associada). Desde a decisao do Luis em 11/10,
-// redireciona (302) para o mesmo caminho no host da aplicacao em execucao,
-// http://<app>.<APPS_DOMAIN>:<porta>/graphicsAppProxy/...; sem aplicacao,
-// 404. Ver ./app-hosts.js.
+// /graphicsAppProxy no host do AoP: 302 para o mesmo caminho no host da
+// aplicacao em execucao; sem aplicacao, 404 (./app-hosts.js).
 app.use('/graphicsAppProxy', appHosts.legacyGraphicsRedirect({ getApp: core.getGraphicsApp }));
 
-// B.6.3: o proxy respeita os metadados de cache da origem (ETag,
-// Last-Modified, Expires). A politica antiga — apagar esses cabecalhos e
-// forcar no-store nas playlists — era o CONTRARIO do que a norma exige
-// (item 25 da vacina). Playlists de transmissao ao vivo devem declarar a
-// propria validade na ORIGEM (simulador), nao ser des-cacheadas no proxy.
+// B.6.3: o proxy preserva os metadados de cache da origem (ETag,
+// Last-Modified, Expires). Playlist ao vivo declara a propria validade na
+// ORIGEM (simulador); nao des-cachear aqui.
 const proxyStream = createProxyMiddleware({
     target: '',
     changeOrigin: true,
@@ -117,7 +98,7 @@ const proxyStream = createProxyMiddleware({
 });
 app.use('/videoStreamProxy', proxyStream);
 
-// excecao em rota (ex.: Redis fora do ar) -> 404 {error:200} (D-0510-6)
+// excecao em rota (ex.: Redis fora do ar) -> 404 {error:200} (C.3.2)
 app.use(require('./http-error').platformErrorHandler);
 
 const server = app.listen(_PORT, () => {
@@ -125,11 +106,10 @@ const server = app.listen(_PORT, () => {
 });
 
 // Upgrade WebSocket: so /mqtt no host do AoP vai ao broker; o resto (outro
-// caminho, host de aplicacao) responde 404 (C1, decisao do Luis em 11/10).
+// caminho, host de aplicacao) responde 404.
 server.on('upgrade', mqttWs.mqttWsUpgrade({ apps: APPS, mqtt: MQTT_WS }));
 console.log(`[mqtt-ws] MQTT por WebSocket em ws://<host do AoP>${mqttWs.MQTT_WS_PATH} -> ${MQTT_WS.target}`);
 
-// notify loading is complete
 if (process.send) {
     process.send('ready');
 }

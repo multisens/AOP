@@ -1,22 +1,7 @@
-// Fonte UNICA do avatar padrao e da paleta (M1 da vacina): a mesma silhueta
-// estava copiada em cinco arquivos — tres services do AoP, duas views e o
-// user-api do tv3ws (atravessando o limite de servico e de linguagem).
-// Toda leitura passa a vir daqui; as views recebem os valores por parametro
-// de renderizacao.
-//
-// G8 (decisao do Luis em 12/10): o campo avatar do perfil e o NOME de um
-// arquivo do diretorio de miniaturas, como a Tabela 7 pede ("avatar": "Path
-// indicating the file with the graphical representation of the viewer
-// profile", file path, optional; p. 63; p. 81 do PDF). Antes, o AoP e a carga
-// gravavam o SVG em linha no campo. Contrato:
-// - diretorio: <USER_DATA_PATH>/thumbs aqui, o mesmo USER_THUMBS do tv3ws
-//   (/user-files/thumbs, volume ./user-files da raiz), que o entrega pela
-//   C.6.14.6 (GET /tv3/<scid>/users/files?path=<avatar>, Tabela C.73);
-// - nome: AVATAR_FILE_RE, sem "/" e sem ".." (o nome e o caminho a partir do
-//   diretorio, sem subdiretorio);
-// - ausente: o avatar padrao de cada tela.
-// O gestor de perfis grava o arquivo como <id do perfil>.svg ao criar o
-// perfil (service.js, createProfile) e o apaga se o perfil nao for gravado.
+// Avatar padrao, paleta e arquivo do avatar. O campo avatar do perfil e o NOME
+// de um arquivo de <USER_DATA_PATH>/thumbs (Tabela 7: "Path indicating the file
+// with the graphical representation of the viewer profile"), sem subdiretorio
+// (AVATAR_FILE_RE); o tv3ws entrega o mesmo diretorio pela C.6.14.6.
 const fs = require('fs');
 const path = require('path');
 const { svgDocument, withSvgNamespace, svgDataUri, imageHtml } = require('../../html');
@@ -29,7 +14,7 @@ function svgAvatar(hex) {
     '</svg>';
 }
 
-const DEFAULT_AVATAR_HEX = '#4d7c5b'; // verde escuro pastel
+const DEFAULT_AVATAR_HEX = '#4d7c5b';
 
 const DEFAULT_AVATAR_SVG = svgAvatar(DEFAULT_AVATAR_HEX);
 
@@ -44,7 +29,6 @@ const AVATAR_COLORS = [
     { hex: '#7c6e4d', name: 'Marrom' }
 ].map(c => ({ ...c, svg: svgAvatar(c.hex) }));
 
-// --- arquivo do avatar (G8) -------------------------------------------------------
 // Formato do nome (o mesmo da regra do avatar em infra/redis/esquema.json)
 const AVATAR_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(svg|png|jpg|jpeg|webp)$/;
 // tipo de imagem pela extensao (a mesma tabela do tv3ws na C.6.14.6)
@@ -66,16 +50,13 @@ function isAvatarFileName(name) {
     return typeof name === 'string' && AVATAR_FILE_RE.test(name);
 }
 
-// nome do arquivo que o gestor grava para o perfil
 function avatarFileName(id) {
     return `${id}.svg`;
 }
 
 // SVG do POST /profile/create: texto que comeca por "<svg" e tem elemento
-// <svg>; ausente ou fora disso, o padrao — como antes, quando o que nao era
-// SVG aparecia como o padrao. O documento gravado leva o xmlns (G7, Joel
-// 15/10: o AoP grava o avatar com ele; o arquivo e entregue como
-// image/svg+xml pela C.6.14.6; ver ../../html.js, withSvgNamespace).
+// <svg>; ausente ou fora disso, o padrao. O arquivo gravado leva o xmlns (e
+// entregue como image/svg+xml pela C.6.14.6).
 function avatarSvg(value) {
     const doc = typeof value === 'string' && value.startsWith('<svg') ? withSvgNamespace(value) : '';
     return doc || svgDocument(DEFAULT_AVATAR_SVG);
@@ -92,9 +73,8 @@ async function writeAvatarFile(id, svg) {
     return name;
 }
 
-// Apaga <thumbs>/<id>.svg (criacao que falhou depois de gravar o arquivo). Arquivo ausente nao e erro (devolve false). So o arquivo que o
-// gestor grava para o perfil: um avatar com outro nome nao foi posto por ele e
-// fica.
+// Apaga <thumbs>/<id>.svg (criacao que falhou depois de gravar o arquivo);
+// ausente devolve false. Avatar com outro nome nao foi posto pelo gestor e fica.
 async function removeAvatarFile(id) {
     const name = avatarFileName(id);
     if (!isAvatarFileName(name)) return false;
@@ -128,27 +108,10 @@ function avatarDataUri(name) {
     }
 }
 
-// Avatar nas telas da plataforma (escolha de perfil, catalogo de aplicacoes,
-// aplicacao de abertura): <img class="avatar"> com o arquivo nomeado no campo
-// avatar embutido em URL data:; sem arquivo ou fora do formato, o padrao.
-// Correcao de 12/10 (spec-1210-seguranca2, item 2): o avatar sai como <img>,
-// e nao mais como SVG em linha no HTML (um "<svg onload=...>" ou com <script>
-// rodava na tela da TV); num <img> o SVG nao roda script. O padrao tambem vai
-// como <img>, para os avatares terem a mesma caixa nas views.
-// G8 (decisao do Luis em 12/10): o AoP le o arquivo e o embute, em vez de
-// servi-lo por uma rota estatica do diretorio de miniaturas:
-// - a porta do AoP e alcancavel por qualquer um na rede, e uma rota dele
-//   entregaria o avatar de qualquer perfil sem a restricao da Tabela C.73
-//   (p. 333; p. 351 do PDF: "the file is returned only if the user has granted
-//   access to the broadcaster"), que o tv3ws aplica na C.6.14.6;
-// - um SVG servido pela origem do AoP e aberto como documento rodaria o
-//   script dele nessa origem (a da pagina da TV, com o /mqtt); embutido num
-//   <img>, nao roda;
-// - as telas ja mostravam o avatar como <img src=data:> (mesma caixa, mesmas
-//   conferencias de escape).
-// Custo: leitura sincrona do arquivo a cada tela (ate cinco perfis).
-// Desde G8, o SVG em linha no campo (perfis gravados antes) esta fora do
-// formato e aparece como o padrao.
+// <img class="avatar"> com o arquivo do avatar em URL data: (sem arquivo, o
+// padrao). Embutido, e nao servido por rota do AoP: a rota entregaria o avatar
+// de qualquer perfil sem a restricao da Tabela C.73, que o tv3ws aplica, e o SVG
+// aberto como documento rodaria script na origem da pagina da TV.
 function avatarHtml(avatar) {
     const src = avatarDataUri(avatar) || svgDataUri(DEFAULT_AVATAR_SVG);
     return imageHtml(src, { class: 'avatar', alt: '' });

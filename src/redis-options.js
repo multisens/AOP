@@ -1,19 +1,8 @@
-// Configuracao do cliente Redis da plataforma, separada do cliente para ser
-// testada sem abrir conexao (test/redis.test.js).
-//
-// D-0510-6 (reuniao 05/10 com o Joel): falha de Redis nao pode ser
-// silenciosa nem travar. O cliente antigo tinha maxRetriesPerRequest: null —
-// com o Redis fora do ar ou congelado, todo comando esperava para sempre e a
-// rota HTTP que dependia dele travava (medido em 09/10: sem resposta em 25 s
-// nos dois casos). Agora:
-// - maxRetriesPerRequest 1: comando enfileirado sem conexao falha apos uma
-//   nova tentativa de conexao sem sucesso (~0,2 a 1 s, medido);
-// - commandTimeout 1500 ms: limite por comando, inclusive com o Redis
-//   aceitando conexao e nao respondendo;
-// - connectTimeout 2000 ms: tentativa de conexao a host que nao responde;
-// - fila offline LIGADA: comandos do boot e de uma reconexao curta esperam a
-//   conexao; o limite acima impede espera longa.
-// O cliente continua tentando reconectar (retryStrategy) e volta sozinho.
+// Opcoes do cliente Redis, fora do cliente para testar sem conexao. Falha de
+// Redis e rapida e explicita, nunca trava a rota (com maxRetriesPerRequest
+// null, o comando sem conexao esperaria para sempre): comando sem conexao falha
+// apos uma nova tentativa (~0,2 a 1 s); commandTimeout cobre o Redis que aceita
+// conexao e nao responde; a fila offline so segura boot e reconexao curta.
 const FAIL_FAST_OPTIONS = Object.freeze({
     connectTimeout: 2000,
     commandTimeout: 1500,
@@ -56,8 +45,7 @@ function logRedisEvents(client, where, log = console.error) {
     client.on('end', () => log(`[redis] cliente de ${where} encerrado; sem novas tentativas`));
 }
 
-// Tarefa de boot que precisa do Redis: roda UMA vez, no primeiro 'ready'.
-// Falha vai para o log com o nome da tarefa.
+// Tarefa de boot que precisa do Redis: roda uma vez, no primeiro 'ready'.
 function whenReady(client, name, task) {
     const run = () => {
         Promise.resolve()

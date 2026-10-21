@@ -1,11 +1,8 @@
 require('dotenv').config();
 const core = require('../../../core');
-// Avatar padrao: fonte unica no gestor de perfis (M1)
 const { avatarHtml } = require('../avatar');
-// escape (correcao de 12/10, spec-1210-seguranca2, item 2; ver
-// ../../../html.js): nickname e id vem do perfil gravado pelo POST
-// /profile/create; antes o nickname ia cru para o HTML, que a view exibe com
-// <%- %> ("<svg/onload=alert()>" cabe nos 20 caracteres do nickname)
+// nickname e id vem do POST /profile/create e vao escapados: a view exibe este
+// HTML com <%- %> ("<svg/onload=alert()>" cabe nos 20 caracteres do nickname)
 const { escapeHtml } = require('../../../html');
 
 

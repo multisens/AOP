@@ -29,8 +29,8 @@ router.get('/appcat', (req, res) => {
     res.status(200).send();
 });
 
-// espera o registro da origem associada (P1); falha do Redis -> 404
-// {error:200} (D-0510-6). A aplicacao ja foi para a camada grafica.
+// espera o registro da origem associada; falha do Redis -> 404 {error:200},
+// com a aplicacao ja na camada grafica.
 router.get('/fullscr', async (req, res) => {
     await service.fullscreen();
     res.status(200).send();

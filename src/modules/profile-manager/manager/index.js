@@ -1,7 +1,4 @@
-// Gestor de perfis (M1): a view de criacao mora DENTRO do modulo e o
-// backend de criacao e da propria plataforma — escrita direta no
-// armazenamento, com o teto de perfis de P3 (ver ../service.js). A antiga
-// rota fora-da-spec POST /tv3/users do tv3ws deixou de existir.
+// Criacao de perfil: view e backend da propria plataforma (../service.js).
 const ejs = require('ejs');
 const express = require('express');
 const path = require('path');
@@ -18,9 +15,8 @@ router.get('/create', async (req, res) => {
     res.send(html);
 });
 
-// D-0510-6: so o erro de validacao responde 400 {error: mensagem} (contrato
-// da view); falha do armazenamento sobe e vira 404 {error:200}
-// (platformErrorHandler) — antes tambem saia como 400 de dado invalido.
+// so erro de validacao responde 400 {error: mensagem} (contrato da view);
+// falha do armazenamento sobe e vira 404 {error:200} (platformErrorHandler)
 router.post('/create', async (req, res) => {
     let result;
     try {

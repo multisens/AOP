@@ -4,7 +4,7 @@
         <title>DTV</title>
         <style>
             :root {
-                --base-size: 1vw; /* Unidade base baseada na largura da viewport */
+                --base-size: 1vw;
             }
 
             body {
@@ -102,7 +102,6 @@
                         height: auto;
                         width: auto;
                         margin: auto;
-                        /* max-height: 200px; */
                         object-fit: contain;
                     }
                 }
@@ -134,12 +133,9 @@
             let player = null;
             let publishTopic = null;
 
-            // MQTT por WebSocket na PROPRIA origem da pagina, caminho /mqtt (C1,
-            // decisao do Luis em 11/10): o AoP atende o upgrade e o repassa ao
-            // mosquitto (src/mqtt-ws.js). Antes a pagina conectava direto na
-            // 9001 do host, que deixou de ser porta fixa. location.host traz o
-            // nome e a porta pelos quais o usuario abriu a pagina (localhost, IP
-            // da LAN etc.), nunca um nome de servico do Docker.
+            // MQTT na PROPRIA origem da pagina, em /mqtt; o AoP repassa ao
+            // mosquitto (src/mqtt-ws.js). location.host e o nome e a porta pelos
+            // quais a pagina foi aberta, nunca um nome de servico do Docker.
             function connect() {
                 const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
                 const client = mqtt.connect(`${scheme}://${window.location.host}/mqtt`, {
@@ -151,10 +147,8 @@
                     subscribe_topics(client);
                     fetch('ready');
                 });
-                // (12/10) excecao no tratamento de uma mensagem vai para o
-                // console: antes ela escapava para o cliente MQTT, e a pagina
-                // parava de tratar TODAS as mensagens seguintes (medido no
-                // Chrome 154 com um JSON invalido no topico do QR code)
+                // excecao no tratamento vai para o console: se escapasse para o
+                // cliente MQTT, a pagina pararia de tratar as mensagens seguintes
                 client.on('message', (t, m) => {
                     try {
                         mqtt_message(client, t, m);
@@ -169,10 +163,8 @@
                 client.subscribe('aop/display/layers/+', { noLocal : true });
                 client.subscribe('aop/display/layers/video/+', { noLocal : true });
                 client.subscribe('aop/display/layers/popup/+/message', { noLocal : true });
-                // QR code e PIN do pareamento do cliente nao local (C.4.3.2,
-                // C.4.3.3): o tv3ws publica em popup/qrcode e popup/pin, sem
-                // /message (tv3ws/src/core.ts); sem esta assinatura eles
-                // nunca chegavam a tela
+                // QR code e PIN do pareamento (C.4.3.2, C.4.3.3) e aviso
+                // (C.6.14.5): o tv3ws publica em popup/<tipo>, sem /message
                 client.subscribe('aop/display/layers/popup/+', { noLocal : true });
                 client.subscribe('video/event', { noLocal : true });
             }
@@ -255,12 +247,7 @@
                     $('#video').css(JSON.parse(message));
                 }
                 else if (t.startsWith('popup') ) {
-                    // abertura e, desde 12/10, fechamento ({"close":true} no
-                    // topico do QR code ou do PIN, no fim do pareamento),
-                    // com a mensagem conferida antes: /js/popup.js. O aviso
-                    // da C.6.14.5 (popup/info, G9, decisao do Luis em 12/10)
-                    // chega pela assinatura de popup/+ e espera a camada
-                    // ficar livre (popup.js)
+                    // abertura, fechamento e conferencia da mensagem: /js/popup.js
                     handlePopupMessage(t.split('/')[1], message.toString());
                 }
             }
@@ -285,16 +272,10 @@
                 }
             }
 
-            // Eventos para a aplicacao de emissora da camada grafica. Desde o
-            // P1.3 (decisao do Luis em 10/10) ela abre na sua propria origem
-            // (http://<app>.<APPS_DOMAIN>:<porta do AoP>), e a politica de
-            // mesma origem impede disparar o evento direto no documento dela,
-            // como antes. Vai por postMessage, so para a origem da aplicacao,
-            // e a ponte do bcast (bcast/public/js/aop-bridge.js) o redespacha
-            // no document dela com o mesmo formato. Se a aplicacao estiver na
-            // mesma origem, o disparo direto continua; desde 11/10 isso nao
-            // acontece pela camada grafica (o /graphicsAppProxy no host do AoP
-            // redireciona para o host da aplicacao).
+            // A aplicacao de emissora roda na propria origem, e a politica de
+            // mesma origem impede disparar o evento no documento dela: vai por
+            // postMessage, so para essa origem, e a ponte do bcast
+            // (bcast/public/js/aop-bridge.js) o redespacha com o mesmo formato.
             function graphics_event(name, init) {
                 const frame = document.getElementById('graphics');
                 if (!frame.getAttribute('src') || !frame.contentWindow) return;

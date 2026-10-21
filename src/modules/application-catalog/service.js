@@ -1,10 +1,7 @@
 const core = require('../../core');
-// Avatar padrao: fonte unica no gestor de perfis (M1)
 const { avatarHtml } = require('../profile-manager/avatar');
-// escape e icone SVG como imagem (correcao de 12/10, spec-1210-seguranca2,
-// item 2; ver ../../html.js): appName, appIcon e globalServiceId vem do BAM
-// da emissora (MQTT) e o nickname do perfil vem do POST /profile/create; antes
-// iam crus para o HTML, que a view exibe com <%- %>
+// appName, appIcon e globalServiceId (BAM da emissora) e nickname (POST
+// /profile/create) vao escapados: a view exibe este HTML com <%- %>
 const { escapeHtml, svgImageHtml } = require('../../html');
 
 

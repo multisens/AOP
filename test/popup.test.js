@@ -1,14 +1,6 @@
-// Pop-ups da camada grafica (public/js/popup.js e o repasse em
-// src/modules/graphic-overlays/view.ejs). Correcao de 12/10
-// (spec-1210-defeitos, item 1): o QR code e o PIN do pareamento ficam na tela
-// ate o tv3ws publicar {"close":true} no mesmo topico (fim do pareamento,
-// C.4.3.2 e C.4.3.3) ou ate o prazo da mensagem de abertura (trava de
-// seguranca, 120 s no tv3ws); mensagem invalida nao lanca nem muda a tela.
-// Os scripts da pagina rodam num contexto vm com dubles do jQuery (so o que
-// popup.js usa do #popup), do QRCode, do relogio (setTimeout/clearTimeout) e
-// da publicacao MQTT; o desenho de verdade e conferido no Chrome.
-// Rodada de 12/10 (spec-1210-seguranca, item 3): texto que vem na mensagem
-// (display-name no sim/nao, PIN) entra no HTML do pop-up so escapado.
+// Pop-ups da camada grafica (public/js/popup.js e o repasse de
+// graphic-overlays/view.ejs), num contexto vm com dubles do jQuery (#popup), do
+// QRCode, do relogio e da publicacao MQTT; o desenho de verdade e no Chrome.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -92,7 +84,7 @@ test('QR code: fica na tela ate o {"close":true} no mesmo topico', () => {
     assert.deepEqual(p.qrcodes.map(q => q.text), ['chave-base64url']);
     assert.equal(p.state().popup_type, 'qrcode');
 
-    p.advance(1000);   // o prazo antigo era 1 s
+    p.advance(1000);
     assert.equal(p.el.visible, true, 'o QR code nao sai em 1 s');
     p.advance(100000);
     assert.equal(p.el.visible, true);
@@ -248,7 +240,7 @@ test('excecao no tratamento de uma mensagem nao escapa para o cliente MQTT da pa
     assert.equal(p.el.visible, false);
 });
 
-// --- 12/10 (spec-1210-seguranca, item 3): injecao de HTML no pop-up ----------------
+// --- injecao de HTML no pop-up -------------------------------------------------
 // Mensagem do sim/nao como o tv3ws a monta (api/client-identification/
 // service.ts, askAuthorization), com o display-name escolhido pelo cliente.
 const askMessage = displayName => `A aplicação "${displayName}" deseja acessar as informações do sinal de TV Digital.\nVocê deseja autorizar isto?`;
@@ -303,11 +295,9 @@ test('QR code: o valor vai so para a biblioteca, como texto; o HTML do pop-up e 
     assert.equal(p.el.html, '<span class="text">Escaneie o QR code abaixo com seu dispositivo.</span>\n<div id="qrcode"></div>');
 });
 
-// --- G9 (decisao do Luis em 12/10): aviso informativo (C.6.14.5) -------------------
-// O tv3ws publica em aop/display/layers/popup/info {"value": <texto>,
-// "timeout": 5000} depois de gravar atributos de emissora. O aviso nao pede
-// resposta, fecha no prazo e nao tira da tela um sim/nao, QR code ou PIN
-// aberto: espera numa fila curta (3) e aparece quando a camada fica livre.
+// --- aviso informativo (C.6.14.5) ----------------------------------------------
+// O tv3ws publica em popup/info {"value", "timeout": 5000}; o aviso nao tira
+// outro pop-up da tela: espera numa fila de 3.
 const INFO = 'aop/display/layers/popup/info';
 const aviso = (value, timeout = 5000) => JSON.stringify({ value, timeout });
 const AVISO = 'A emissora urn:tv30:service:users-test atualizou os dados do perfil Viewer 1.';
@@ -436,7 +426,7 @@ test('aviso (info) na tela substituido pelo sim/nao, QR code ou PIN: volta para 
     p.deliver(INFO, aviso(AVISO));
     p.advance(2000);
     p.deliver(YESNO, open('Autoriza?', 10000));
-    assert.equal(p.state().popup_type, 'yesno', 'G2: o novo substitui o da tela');
+    assert.equal(p.state().popup_type, 'yesno', 'o novo substitui o da tela');
     p.advance(5000);
     assert.equal(p.state().popup_type, 'yesno', 'o prazo do aviso substituido nao fecha o sim/nao');
     vm.runInContext('window.PopupYes()', p.ctx);

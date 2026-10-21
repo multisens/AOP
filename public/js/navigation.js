@@ -44,6 +44,6 @@ function navigate(key) {
             }
             break;
         default:
-            return; // Exit if other key pressed
+            return;
     }
 }

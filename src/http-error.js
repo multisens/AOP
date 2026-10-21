@@ -1,8 +1,6 @@
-// Ultimo middleware das rotas da plataforma (D-0510-6, reuniao 05/10 com o
-// Joel): excecao em rota — inclusive promessa rejeitada, que o Express 5
-// encaminha para ca, como falha do Redis — vira 404 {error:200} no formato
-// C.3.2 (erro 200, "Platform resource unavailable"), em vez de pagina HTML
-// de erro ou rota que nunca responde.
+// Ultimo middleware: excecao em rota (inclusive promessa rejeitada, que o
+// Express 5 encaminha para ca, como falha do Redis) vira 404 {error:200} no
+// formato C.3.2, em vez de pagina HTML de erro ou rota que nunca responde.
 function platformErrorHandler(err, req, res, next) {
     if (res.headersSent) return next(err);
     const msg = err && err.message ? err.message : String(err);

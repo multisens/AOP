@@ -1,12 +1,6 @@
-// P4 (decisao do Luis em 10/10, "Funcoes + auditoria"): teste ESTATICO — a
-// plataforma so grava no Redis (users:index, user:*, origins:associated) pelo
-// adaptador src/redis-funcoes.js, que chama as funcoes do Redis. Falha se
-// outro arquivo de src/ chamar comando de escrita no cliente Redis (set,
-// hset, sadd, del, eval, multi, call...).
-//
-// As regras e a lista de familias vem de infra/redis (verificador
-// infra/redis/test/escritas.js e esquema infra/redis/esquema.json): o teste
-// precisa do TV30 com os submodulos (aop/ ao lado de infra/).
+// Teste ESTATICO: a plataforma so grava no Redis pelo adaptador
+// src/redis-funcoes.js. Regras e familias vem de infra/redis (test/escritas.js,
+// esquema.json): precisa do TV30 com os submodulos (aop/ ao lado de infra/).
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

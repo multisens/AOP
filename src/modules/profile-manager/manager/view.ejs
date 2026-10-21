@@ -121,7 +121,6 @@
             margin-top: 0;
         }
 
-        /* === MODAL DE SELEÇÃO DE AVATAR === */
         .avatar-modal {
             position: fixed;
             top: 0;
@@ -412,7 +411,6 @@
             text-decoration: underline;
         }
 
-        /* Foco por teclado (navegacao por setas) */
         .kbd-focus {
             outline: 4px solid #4CAF50 !important;
             outline-offset: 4px;
@@ -430,7 +428,6 @@
             <form id="profile-form">
                 <input type="text" id="name" name="name" placeholder="Nome do perfil (obrigatório, até 20 caracteres)" maxlength="20" required>
 
-                <!-- Configurações de Idioma (ABNT NBR 25608, Tabela 7) -->
                 <div class="language-options">
                     <label>Configurações de Idioma:</label>
                     <select id="audioLanguage" name="audioLanguage">
@@ -441,20 +438,17 @@
                         <option value="pt-BR">Interface: Português</option>
                         <option value="en">Interface: Inglês</option>
                     </select>
-                    <!-- closedCaptioningLanguage: aplicável somente se closedCaptioning = true -->
                     <select id="closedCaptioningLanguage" name="closedCaptioningLanguage" style="display: none;">
                         <option value="pt-BR">Legendas: Português</option>
                         <option value="en">Legendas: Inglês</option>
                     </select>
                 </div>
 
-                <!-- Controle Parental (ABNT NBR 25608) -->
                 <div class="profile-options">
                     <input type="checkbox" id="parental-control" name="parental-control">
                     <label for="parental-control">Ativar Controle Parental</label>
                 </div>
                 
-                <!-- Botões de Acessibilidade -->
                 <div class="accessibility-options">
                     <div class="accessibility-item" onclick="toggleAccessibility('audio-description')">
                         <img id="audio-description" src="/media/audio-description.png" alt="Audiodescrição">
@@ -478,7 +472,6 @@
                     </div>
                 </div>
 
-                <!-- Configurações da Janela de Libras (norma ABNT NBR 25608) -->
                 <div id="signing-config" class="signing-config" style="display: none;">
                     <h3>Configurações da Janela de Libras</h3>
                     <div class="signing-options">
@@ -497,7 +490,6 @@
                     </div>
                 </div>
 
-                <!-- maxContentRating (ABNT NBR 25608) — requerido somente se parentalControl = true -->
                 <div id="content-rating-section" class="content-rating-section" style="display: none;">
                     <h3>Classificação Máxima Permitida</h3>
                     <div class="ratings">
@@ -513,7 +505,6 @@
             </form>
         </div>
         
-        <!-- Seção de Avatar -->
         <div class="avatar-section">
             <button type="button" class="avatar-button" onclick="openAvatarSelection()">
                 <div id="selected-avatar" class="avatar-preview"></div>
@@ -522,7 +513,6 @@
         </div>
     </div>
 
-    <!-- Modal de Seleção de Avatar (SVG inline com paleta de cores) -->
     <div id="avatar-modal" class="avatar-modal" style="display: none;">
         <div class="avatar-modal-content">
             <div class="modal-header">
@@ -542,7 +532,6 @@
     </div>
     
     <div class="terms-actions">
-        <!-- Seção de Termos -->
         <div class="terms">
             <input type="checkbox" id="terms" name="terms" required>
             <label for="terms">
@@ -551,7 +540,6 @@
             </label>
         </div>
         
-        <!-- Botões -->
         <div class="actions">
             <button type="button" id="btn-create" class="btn create" onclick="createAnother()">Criar Outro</button>
             <button type="button" id="btn-advance" class="btn advance" onclick="saveProfile()">Avançar</button>
@@ -559,8 +547,6 @@
     </div>
 
     <script>
-        // Funcoes do Profile Creation adaptadas para o AoP
-
         function selectMaxContentRating(rating, element) {
             document.querySelectorAll('.ratings img').forEach(img => img.classList.remove('selected'));
             element.classList.add('selected');
@@ -572,20 +558,15 @@
             element.classList.toggle('selected');
             const isSelected = element.classList.contains('selected');
 
-            // closedSigning -> mostra/oculta configuracoes da janela de libras
             if (accessibilityId === 'sign-language') {
                 document.getElementById('signing-config').style.display = isSelected ? 'block' : 'none';
             }
-            // closedCaptioning -> mostra/oculta seletor de closedCaptioningLanguage
             if (accessibilityId === 'closed-caption') {
                 document.getElementById('closedCaptioningLanguage').style.display = isSelected ? 'block' : 'none';
             }
         }
 
-        // === SISTEMA DE SELECAO DE AVATARES (SVG inline com paleta) ===
-
-        // Paleta e avatar padrao vem do modulo unico do gestor de perfis
-        // (avatar.js) — a silhueta nao mora mais copiada nesta view (M1).
+        // Paleta e avatar padrao: ../avatar.js
         const AVATAR_COLORS = <%- JSON.stringify(avatarColors) %>;
         const DEFAULT_AVATAR_SVG = <%- JSON.stringify(defaultAvatar) %>;
 
@@ -604,7 +585,6 @@
 
         function closeAvatarModal() {
             document.getElementById('avatar-modal').style.display = 'none';
-            // Restaura preview se o usuario cancelou
             renderSelectedAvatarPreview();
             tempSelectedAvatar = null;
         }
@@ -630,7 +610,6 @@
             document.querySelectorAll('.avatar-option.selected').forEach(opt => opt.classList.remove('selected'));
             element.classList.add('selected');
             tempSelectedAvatar = svg;
-            // Preview instantaneo
             document.getElementById('selected-avatar').innerHTML = svg;
         }
 
@@ -647,11 +626,9 @@
             const name = document.getElementById('name').value.trim();
             const parentalControl = document.getElementById('parental-control').checked;
 
-            // Idiomas (ABNT NBR 25608, Tabela 7)
             const audioLanguage = document.getElementById('audioLanguage').value;
             const userInterfaceLanguage = document.getElementById('userInterfaceLanguage').value;
 
-            // Acessibilidade (nomes canonicos da norma)
             const closedCaptioning   = document.getElementById('closed-caption').parentElement.classList.contains('selected');
             const closedSigning      = document.getElementById('sign-language').parentElement.classList.contains('selected');
             const audioDescription   = document.getElementById('audio-description').parentElement.classList.contains('selected');
@@ -670,7 +647,6 @@
             // maxContentRating: requerido somente se parentalControl = true
             const maxContentRating = parentalControl ? document.getElementById('maxContentRating').value : undefined;
 
-            // Validacoes
             if (!name || !document.getElementById('terms').checked) {
                 alert('Preencha o nome do perfil e aceite os termos.');
                 return;
@@ -702,9 +678,7 @@
                 voiceGuidance
             };
 
-            // Criacao de perfil e funcao do gestor de perfis da PLATAFORMA
-            // (P3): POST na propria origem, escrita direta no armazenamento.
-            // A antiga rota fora-da-spec POST /tv3/users do tv3ws saiu.
+            // a criacao de perfil e da plataforma (POST na propria origem)
             fetch('/profile/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -741,27 +715,21 @@
             focusStop(0);
         }
 
-        // Event listeners para funcionalidades da norma
         document.addEventListener('DOMContentLoaded', function() {
-            // parentalControl -> mostra/oculta maxContentRating
             document.getElementById('parental-control').addEventListener('change', function() {
                 document.getElementById('content-rating-section').style.display = this.checked ? 'block' : 'none';
             });
 
-            // Atualizar display da largura da janela de libras
             document.getElementById('closedSigningWidth').addEventListener('input', function() {
                 document.getElementById('width-value').textContent = this.value + '%';
             });
 
-            // Sincronizar idiomas por padrao
             document.getElementById('audioLanguage').addEventListener('change', function() {
                 const selectedLang = this.value;
                 document.getElementById('closedCaptioningLanguage').value = selectedLang;
                 document.getElementById('userInterfaceLanguage').value = selectedLang;
             });
         });
-
-        // === Navegacao por teclado (ordem logica do form) ===
 
         let currentStopIdx = 0;
 
@@ -825,7 +793,6 @@
             const modal = document.getElementById('avatar-modal');
             const isModalOpen = modal.style.display === 'flex';
 
-            // Modal de avatar tem navegacao propria
             if (isModalOpen) {
                 if (e.key === 'Escape') {
                     closeAvatarModal();
@@ -846,7 +813,6 @@
                 return;
             }
 
-            // Esc volta para profile-chooser
             if (e.key === 'Escape') {
                 window.location.href = '/prfchs';
                 return;
@@ -856,7 +822,6 @@
             const el = stops[currentStopIdx];
             if (!el) return;
 
-            // Campo de texto: digitar livremente; setas verticais navegam, Enter avanca
             if (el.tagName === 'INPUT' && el.type === 'text') {
                 if (e.key === 'ArrowDown' || e.key === 'Enter') {
                     e.preventDefault();
@@ -868,7 +833,6 @@
                 return;
             }
 
-            // Select: Left/Right cicla opcoes; Up/Down navega entre stops
             if (el.tagName === 'SELECT') {
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
                     e.preventDefault();
@@ -888,7 +852,6 @@
                 return;
             }
 
-            // Range slider: Left/Right ajusta valor (default nativo); Up/Down navega
             if (el.tagName === 'INPUT' && el.type === 'range') {
                 if (e.key === 'ArrowDown') {
                     e.preventDefault();
@@ -903,7 +866,6 @@
                 return; // Left/Right segue comportamento nativo do range
             }
 
-            // Demais elementos (checkbox, img de rating, accessibility-item, button)
             if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
                 e.preventDefault();
                 focusStop(currentStopIdx + 1);
@@ -916,7 +878,6 @@
             }
         });
 
-        // Render inicial do preview SVG + foco no primeiro campo
         window.addEventListener('load', () => {
             renderSelectedAvatarPreview();
             focusStop(0);

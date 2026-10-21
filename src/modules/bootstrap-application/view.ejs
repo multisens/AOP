@@ -5,9 +5,7 @@
         <style>
             :root {
                 --base-size: 1vw;
-                /* cores do BAM e do ESG so no formato #RRGGBB(AA), senao o
-                   padrao: service.js, cssHexColor (12/10, spec-1210-defeitos3
-                   item 4) */
+                /* cores ja conferidas em service.js (cssHexColor) */
                 --foreground-color: <%= foregroundColor %>;
                 --background-color: <%= backgroundColor %>;
                 --genre-color: <%= genreColor %>;
@@ -68,8 +66,6 @@
                     overflow: hidden;
                 }
 
-                /* icone do BAM: <img> com o SVG em URL data: desde 12/10
-                   (spec-1210-seguranca2 item 2; src/html.js) */
                 svg, img {
                     max-width: 90%;
                     max-height: 90%;
@@ -185,9 +181,6 @@
                     margin-right: 0.3vw;
                 }
 
-                /* avatar: <img> com o SVG em URL data: desde 12/10
-                   (spec-1210-seguranca2 item 2; src/html.js), com a mesma
-                   caixa do SVG em linha de antes */
                 img.avatar {
                     width: 100%;
                     height: auto;
