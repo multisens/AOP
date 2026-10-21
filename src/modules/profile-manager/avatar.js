@@ -110,7 +110,7 @@ function avatarDataUri(name) {
 
 // <img class="avatar"> com o arquivo do avatar em URL data: (sem arquivo, o
 // padrao). Embutido, e nao servido por rota do AoP: a rota entregaria o avatar
-// de qualquer perfil sem a restricao da Tabela C.73, que o tv3ws aplica, e o SVG
+// de qualquer perfil sem a restricao da Tabela C.75, que o tv3ws aplica, e o SVG
 // aberto como documento rodaria script na origem da pagina da TV.
 function avatarHtml(avatar) {
     const src = avatarDataUri(avatar) || svgDataUri(DEFAULT_AVATAR_SVG);
