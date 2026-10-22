@@ -1,7 +1,7 @@
 // A pagina da TV conecta o MQTT em ws(s)://<host da pagina>/mqtt e o AoP repassa o
 // upgrade, com o caminho intacto, a ws://${MQTT_HOST}:${MQTT_WS_PORT}. Num host de
 // aplicacao, 404: a aplicacao de emissora nao alcanca o broker pela origem dela.
-// MQTT, broker e este repasse sao escolhas do testbed; a ABNT NBR 25608 nao os trata.
+// MQTT, broker e este repasse sao do testbed; a ABNT NBR 25608 nao os trata.
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { hostLabel } = require('./app-hosts');
 

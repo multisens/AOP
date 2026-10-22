@@ -1,7 +1,7 @@
 // Cada aplicacao de emissora abre na propria origem, http://<rotulo>.<APPS_DOMAIN>:<AOP_PUBLIC_PORT>,
 // com proxy para o bcastEntryPackageUrl da BALD; borda e tv3ws reconhecem o associado
 // pelo Origin. A C.4.1.7 fala em porta de origem atribuida pelo gerenciador e deixa o
-// mecanismo de diferenciacao a implementacao: host por aplicacao e escolha deste testbed.
+// mecanismo de diferenciacao a implementacao: o testbed usa um host por aplicacao.
 const crypto = require('crypto');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
