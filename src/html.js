@@ -1,18 +1,18 @@
-// HTML do servidor com dado de fora da plataforma (BAM da emissora, perfil do
-// POST /profile/create), que as views exibem com <%- %>: texto e atributo vao
-// escapados; SVG vai em <img src="data:image/svg+xml;base64,...">, onde o
-// navegador nao roda script nem carrega recurso externo (Tabela 6: "Secure
-// static mode SVG image").
+// Server HTML with data from outside the platform (BAM of the broadcaster,
+// profile of POST /profile/create), which the views show with <%- %>: text
+// and attributes are escaped; SVG goes in
+// <img src="data:image/svg+xml;base64,...">, where the browser runs no
+// script and loads no external resource (Table 6: "Secure static mode SVG
+// image").
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
-// Tabela 6: appIcon e bannerIcon sao xs:any namespace="http://www.w3.org/2000/svg".
-// SVG sem esse xmlns e recusado, nao corrigido: corrigir faria a emissora validar
-// no testbed um BAM que um receptor que confira o tipo recusaria.
-// Devolve o motivo da recusa ('' = aceito).
+// Table 6: appIcon and bannerIcon are xs:any
+// namespace="http://www.w3.org/2000/svg". An SVG without this xmlns is
+// refused, not fixed. Returns the reason of the refusal ('' = accepted).
 function svgProblem(svg) {
     if (typeof svg !== 'string' || svg.trim() === '') return 'ausente';
     const root = /<svg(?=[\s/>])[^>]*>/.exec(svg);
@@ -23,14 +23,15 @@ function svgProblem(svg) {
     return '';
 }
 
-// Texto com SVG -> documento SVG (image/svg+xml); '' se recusado (svgProblem).
-// Como imagem, SVG que nao seja XML bem formado nao aparece.
+// Text with SVG to an SVG document (image/svg+xml); '' if refused
+// (svgProblem). As an image, an SVG that is not well-formed XML does not
+// show.
 function svgDocument(svg) {
     return svgProblem(svg) ? '' : svg.trim();
 }
 
-// SVG que o PROPRIO AoP grava (avatar do perfil): acrescenta o xmlns quando o
-// formulario o manda sem ele. '' se nao houver elemento <svg>.
+// SVG the AoP itself writes (profile avatar): adds the xmlns when the form
+// sends it without one. '' if there is no <svg> element.
 function withSvgNamespace(svg) {
     if (typeof svg !== 'string') return '';
     let doc = svg.trim();
@@ -42,22 +43,21 @@ function withSvgNamespace(svg) {
     return svgDocument(doc);
 }
 
-// Texto com SVG -> URL data: de imagem; '' se nao houver elemento <svg>
+// Text with SVG to an image data: URL; '' if there is no <svg> element.
 function svgDataUri(svg) {
     const doc = svgDocument(svg);
     return doc ? `data:image/svg+xml;base64,${Buffer.from(doc, 'utf8').toString('base64')}` : '';
 }
 
-// <img> com a URL dada, com atributos extras escapados; '' sem URL
+// <img> with the given URL, with extra attributes escaped; '' without URL.
 function imageHtml(src, attrs = {}) {
     if (!src) return '';
     const extra = Object.entries(attrs).map(([k, v]) => ` ${k}="${escapeHtml(v)}"`).join('');
     return `<img src="${escapeHtml(src)}"${extra}>`;
 }
 
-// <img> do SVG, com atributos extras escapados; '' sem SVG. Com label, o SVG
-// recusado sai no log com o motivo, uma vez por label e motivo (as telas sao
-// montadas de novo a cada visita).
+// <img> of the SVG, with extra attributes escaped; '' without SVG. With
+// label, a refused SVG is logged with the reason, once per label and reason.
 const refusalsLogged = new Set();
 function svgImageHtml(svg, attrs = {}, label = '') {
     const problem = svgProblem(svg);
@@ -68,9 +68,10 @@ function svgImageHtml(svg, attrs = {}, label = '') {
     return imageHtml(svgDataUri(svg), attrs);
 }
 
-// Cor que vai para dentro de <style>: o escape de HTML do <%= %> nao protege
-// CSS ("red; } body { ... }" reescreveria a folha). So passa #RRGGBB, ou
-// tambem #RRGGBBAA com alpha: true; o resto vira fallback.
+// Color that goes inside <style>: the HTML escaping of <%= %> does not
+// protect CSS ("red; } body { ... }" would rewrite the sheet). Only #RRGGBB
+// passes, or also #RRGGBBAA with alpha: true; anything else becomes the
+// fallback.
 function cssHexColor(value, fallback, { alpha = false } = {}) {
     const re = alpha ? /^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$/ : /^#[0-9A-Fa-f]{6}$/;
     return typeof value === 'string' && re.test(value) ? value : fallback;

@@ -1,6 +1,7 @@
-// Testes de src/mqtt-ws.js, sem mosquitto de verdade: upgrade real (RFC 6455)
-// contra um WebSocket local no papel do broker, o cliente mqtt da pagina pelo
-// AoP, 404 em host de aplicacao e em outro caminho, 502 com broker fora do ar.
+// Tests of src/mqtt-ws.js, without a real mosquitto: a real upgrade (RFC
+// 6455) against a local WebSocket acting as the broker, the mqtt client of
+// the page through the AoP, 404 on an application host and on another path,
+// 502 with the broker down.
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
@@ -17,7 +18,7 @@ const mqttWs = require('../src/mqtt-ws');
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const acceptOf = key => crypto.createHash('sha1').update(key + GUID).digest('base64');
 
-// --- quadros WebSocket (RFC 6455), so o necessario para o teste --------------------
+// --- WebSocket frames (RFC 6455), only what the test needs -------------------
 function encodeFrame(payload, mask) {
     const len = payload.length;
     const head = len < 126 ? Buffer.from([0x82, (mask ? 0x80 : 0) | len])
@@ -29,7 +30,8 @@ function encodeFrame(payload, mask) {
     return Buffer.concat([head, key, body]);
 }
 
-// Le quadros do socket; onFrame({ opcode, masked, payload }) para cada um.
+// Reads frames from the socket; onFrame({ opcode, masked, payload }) for
+// each one.
 function readFrames(socket, initial, onFrame) {
     let buf = initial && initial.length ? Buffer.from(initial) : Buffer.alloc(0);
     const parse = () => {
@@ -60,7 +62,8 @@ function readFrames(socket, initial, onFrame) {
     parse();
 }
 
-// O CONNECT ja chegou inteiro? (tamanho restante em varint, MQTT 3.1.1, 2.2.3)
+// Has the CONNECT fully arrived? (remaining length as a varint, MQTT 3.1.1,
+// 2.2.3)
 function connectComplete(b) {
     let len = 0;
     let mult = 1;
@@ -72,11 +75,12 @@ function connectComplete(b) {
     return false;
 }
 
-// --- "mosquitto": servidor WebSocket local ---------------------------------------
-// Conexao que comeca por CONNECT do MQTT (primeiro byte 0x10): junta o fluxo
-// (o cliente pode partir um pacote em varios quadros) e, com o CONNECT
-// inteiro, responde CONNACK aceito. Outra conexao: ecoa cada quadro com o
-// prefixo 'eco:'. Guarda cada pedido de upgrade, cada quadro e o fluxo MQTT.
+// --- "mosquitto": local WebSocket server -------------------------------------
+// A connection that starts with an MQTT CONNECT (first byte 0x10): joins the
+// stream (the client may split a packet into several frames) and, with the
+// whole CONNECT, answers an accepted CONNACK. Any other connection: echoes
+// each frame with the 'eco:' prefix. Keeps each upgrade request, each frame
+// and the MQTT stream.
 async function startBroker() {
     const upgrades = [];
     const frames = [];
@@ -115,7 +119,7 @@ async function startBroker() {
     };
 }
 
-// --- "AoP": Express + o ouvinte de upgrade do src/mqtt-ws.js ----------------------
+// --- "AoP": Express and the upgrade listener of src/mqtt-ws.js ---------------
 const APPS = appHosts.appsConfig({ APPS_DOMAIN: 'apps.localhost', AOP_PUBLIC_PORT: '8080' });
 const logs = [];
 const log = { log: m => logs.push(m), error: m => logs.push(m) };
@@ -134,7 +138,7 @@ async function startAop(brokerPort) {
     };
 }
 
-// Pedido de upgrade cru, com o Host que o navegador mandaria.
+// Raw upgrade request, with the Host the browser would send.
 function upgradeRequest(port, { host, path: p = '/mqtt' }) {
     return new Promise((resolve, reject) => {
         const key = crypto.randomBytes(16).toString('base64');
@@ -160,7 +164,7 @@ function upgradeRequest(port, { host, path: p = '/mqtt' }) {
 const closers = [];
 after(async () => { for (const c of closers.reverse()) await c(); });
 
-// --- configuracao -------------------------------------------------------------------
+// --- configuration -----------------------------------------------------------
 test('mqttWsConfig: alvo ws://MQTT_HOST:MQTT_WS_PORT, padrao 9001; valor invalido lanca erro', () => {
     assert.deepEqual({ ...mqttWs.mqttWsConfig({ MQTT_HOST: 'mosquitto' }) }, { host: 'mosquitto', port: 9001, target: 'ws://mosquitto:9001' });
     assert.equal(mqttWs.mqttWsConfig({ MQTT_HOST: 'mosquitto', MQTT_WS_PORT: '' }).port, 9001);
@@ -174,7 +178,7 @@ test('mqttWsConfig: alvo ws://MQTT_HOST:MQTT_WS_PORT, padrao 9001; valor invalid
     }
 });
 
-// --- repasse --------------------------------------------------------------------------
+// --- passing on --------------------------------------------------------------
 test('host do AoP, /mqtt: upgrade de verdade ate o broker, com quadros nos dois sentidos', async () => {
     const broker = await startBroker(); closers.push(broker.close);
     const aop = await startAop(broker.port); closers.push(aop.close);
@@ -182,8 +186,8 @@ test('host do AoP, /mqtt: upgrade de verdade ate o broker, com quadros nos dois 
     const r = await upgradeRequest(aop.port, { host: 'localhost:8080' });
     assert.equal(r.upgraded, true, `esperava 101, veio ${r.status} ${r.body}`);
     assert.equal(r.res.statusCode, 101);
-    // a chave de aceite e a do broker para a chave deste cliente: o handshake
-    // passou pelo AoP sem ser fabricado nem trocado
+    // The accept key is the broker's for the key of this client: the
+    // handshake went through the AoP without being made up or replaced.
     assert.equal(r.res.headers['sec-websocket-accept'], acceptOf(r.key));
     assert.equal(r.res.headers['sec-websocket-protocol'], 'mqtt');
     assert.equal(broker.upgrades.length, 1);
@@ -263,9 +267,10 @@ test('broker fora do ar: o upgrade responde 502 e o AoP registra a falha', async
     assert.ok(logs.some(l => /\[mqtt-ws\] falha no repasse/.test(l) && /ECONNREFUSED/.test(l)), logs.join('\n'));
 });
 
-// --- a pagina -------------------------------------------------------------------------
+// --- the page ----------------------------------------------------------------
 test('pagina da TV (GET /): conecta o MQTT na propria origem, em /mqtt, sem porta do broker', async () => {
-    // o modulo exige o core (MQTT e Redis de verdade): duble so com o usado aqui
+    // The module requires the core (real MQTT and Redis): a double with only
+    // what is used here.
     const coreFile = require.resolve(path.join(__dirname, '..', 'src', 'core'));
     const m = new Module(coreFile);
     m.filename = coreFile;

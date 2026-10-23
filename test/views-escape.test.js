@@ -1,6 +1,7 @@
-// Injecao de HTML nas telas do AoP fora dos pop-ups (catalogo, aplicacao de
-// abertura, escolha de perfil), pelos routers e views REAIS com o core trocado
-// por um duble: texto e atributo escapados; SVG so como <img> com URL data:.
+// HTML injection in the AoP screens outside the pop-ups (catalog, opening
+// application, profile choice), through the REAL routers and views with the
+// core replaced by a double: text and attributes escaped; SVG only as <img>
+// with a data: URL.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
@@ -9,11 +10,11 @@ const express = require('express');
 
 const { escapeHtml, svgDataUri, svgImageHtml, svgProblem, withSvgNamespace, SVG_NS } = require('../src/html');
 
-// --- dados -----------------------------------------------------------------------
+// --- data --------------------------------------------------------------------
 const INJ = tag => `window.__injetado=(window.__injetado||[]).concat('${tag}')`;
-// amostra como as do bcast: com o xmlns do SVG
+// A sample like those of bcast: with the SVG xmlns.
 const SAMPLE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 95" style="fill:#003461" preserveAspectRatio="xMidYMid meet"><path d="M0 0h10v10z"/></svg>';
-// sem o namespace: recusado
+// Without the namespace: refused.
 const ICON_NO_NS = '<svg viewBox="0 0 180 95"><path d="M0 0h10v10z"/></svg>';
 const HOSTILE = {
     globalServiceId: `urn:hostil" onfocus="${INJ('gsid')}" autofocus tabindex="1`,
@@ -23,8 +24,8 @@ const HOSTILE = {
 };
 const SAMPLE = { globalServiceId: 'urn:amostra:uff', appName: 'UFF TV', appIcon: SAMPLE_ICON, appDescription: 'A TV', backgroundColor: '#282828', foregroundColor: '#c8c8c8' };
 const HOSTILE_AVATAR = `<svg xmlns="${SVG_NS}" viewBox="0 0 100 100" onload="${INJ('avatar')}"><script>${INJ('avatar-script')}</script></svg>`;
-// o campo avatar nomeia um arquivo de <USER_DATA_PATH>/thumbs; o SVG hostil
-// mora em hostil.svg
+// The avatar field names a file of <USER_DATA_PATH>/thumbs; the hostile SVG
+// lives in hostil.svg.
 const fs = require('fs');
 const os = require('os');
 const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'aop-views-'));
@@ -35,14 +36,14 @@ fs.writeFileSync(path.join(THUMBS, 'hostil.svg'), HOSTILE_AVATAR);
 const users = [
     { id: '0b6f3e2a-7c1d-4e5f-9a8b-2c3d4e5f6a7b', name: 'Maria', avatar: null },
     { id: '9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d', name: '<svg/onload=alert()>', avatar: 'hostil.svg' },
-    // o esquema do Redis exige UUID no id (infra/redis/esquema.json); o
-    // escape no atributo e defesa a mais
+    // The Redis schema requires a UUID in the id (infra/redis/esquema.json);
+    // escaping in the attribute is an extra defense.
     { id: `x" onfocus="${INJ('id')}`, name: 'Id hostil', avatar: null },
 ];
 const services = new Map([[SAMPLE.globalServiceId, { bam: SAMPLE }], [HOSTILE.globalServiceId, { bam: HOSTILE }]]);
 let currentService = HOSTILE.globalServiceId;
 
-// --- duble do core -------------------------------------------------------------------
+// --- double of the core ------------------------------------------------------
 const coreFile = require.resolve('../src/core');
 const fakeCore = {
     GUI: { app_catalogue: '/appcat', profile_chooser: '/prfchs', profile_creator: '/profile/create', bootstrap_app: '/btpapp' },
@@ -55,7 +56,8 @@ const fakeCore = {
     async refreshUserData() {},
 };
 const m = new Module(coreFile); m.filename = coreFile; m.loaded = true; m.exports = fakeCore; require.cache[coreFile] = m;
-// a unidade dona da lista de servicos (o catalogo le dela), sem Redis
+// The unit that owns the list of services (the catalog reads from it),
+// without Redis.
 const llsFile = require.resolve('../src/modules/transport-layer-metadata-lls');
 const ml = new Module(llsFile); ml.filename = llsFile; ml.loaded = true; require.cache[llsFile] = ml;
 ml.exports = { services: async () => [...services].map(([serviceContextId, s]) => ({ serviceContextId, bam: s.bam })) };
@@ -78,9 +80,10 @@ const page = async route => {
     assert.equal(res.status, 200, route);
     return res.text();
 };
-// o que sobra do HTML sem as URLs data: (o SVG codificado nao e HTML da pagina)
+// What is left of the HTML without the data: URLs (the encoded SVG is not
+// HTML of the page).
 const withoutDataUris = html => html.replace(/data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+/g, 'data:...');
-// marcas de HTML injetado: so podem aparecer escapadas
+// Marks of injected HTML: they may only appear escaped.
 function assertNoInjection(html, where) {
     const h = withoutDataUris(html);
     assert.doesNotMatch(h, /\son(load|error|focus)\s*=\s*"/, `${where}: atributo de evento cru`);
@@ -92,7 +95,7 @@ function assertNoInjection(html, where) {
 const decode = uri => Buffer.from(uri.replace('data:image/svg+xml;base64,', ''), 'base64').toString('utf8');
 const imgSources = html => [...html.matchAll(/<img src="(data:image\/svg\+xml;base64,[^"]+)"/g)].map(x => x[1]);
 
-// --- src/html.js -------------------------------------------------------------------
+// --- src/html.js -------------------------------------------------------------
 test('escapeHtml: & < > " \' escapados; nulo vira vazio', () => {
     assert.equal(escapeHtml(`<a href="x" title='y'>&</a>`), '&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;');
     assert.equal(escapeHtml(undefined), '');
@@ -104,9 +107,9 @@ test('svgDataUri: so SVG no namespace do SVG; sem xmlns, ou com outro, recusado 
     assert.equal(decode(svgDataUri(SAMPLE_ICON)), SAMPLE_ICON);
     const withNs = `<svg xmlns='${SVG_NS}' viewBox="0 0 1 1"/>`;
     assert.equal(decode(svgDataUri(withNs)), withNs);
-    // prologo XML e espacos em volta
+    // XML prologue and surrounding spaces.
     assert.equal(decode(svgDataUri(`  <?xml version="1.0"?><svg xmlns="${SVG_NS}">x</svg> `)), `<?xml version="1.0"?><svg xmlns="${SVG_NS}">x</svg>`);
-    // fora do namespace: recusado, com o motivo
+    // Outside the namespace: refused, with the reason.
     for (const v of [ICON_NO_NS, '<svg xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1 1"/>', '<svg xmlns="http://example.com/x"/>']) {
         assert.equal(svgDataUri(v), '', v);
         assert.match(svgProblem(v), /fora do namespace/, v);
@@ -142,7 +145,7 @@ test('svgImageHtml: <img> com a URL data: e atributos escapados; sem SVG, nada',
     assert.equal(svgImageHtml('nao e svg'), '');
 });
 
-// --- telas ----------------------------------------------------------------------------
+// --- screens -----------------------------------------------------------------
 test('catalogo (/appcat): appName, globalServiceId e nickname hostis escapados; icones como <img> data:', async () => {
     const html = await page('/appcat');
     assertNoInjection(html, 'catalogo');
@@ -150,7 +153,7 @@ test('catalogo (/appcat): appName, globalServiceId e nickname hostis escapados; 
     assert.ok(html.includes(`selectParam="${escapeHtml(HOSTILE.globalServiceId)}"`), 'globalServiceId escapado no atributo');
     assert.ok(html.includes(`<span>${escapeHtml(users[1].name)}</span>`), 'nickname escapado');
     const srcs = imgSources(html).map(decode);
-    // icones das duas aplicacoes e o avatar
+    // Icons of the two applications and the avatar.
     assert.ok(srcs.includes(SAMPLE_ICON), 'icone da amostra, com xmlns');
     assert.ok(srcs.includes(HOSTILE.appIcon), 'icone hostil so dentro do <img>');
     assert.ok(srcs.includes(HOSTILE_AVATAR), 'avatar hostil so dentro do <img>');
@@ -165,7 +168,7 @@ test('aplicacao de abertura (/btpapp): icone como <img> data:, nickname escapado
         const bam = services.get(sid).bam;
         assert.match(html, /<div class="icon">\s*<img src="data:image\/svg\+xml;base64,/, `${sid}: icone em <img>`);
         assert.ok(imgSources(html).map(decode).some(s => s.includes('viewBox="0 0 ' + (bam === SAMPLE ? '180 95' : '10 10'))));
-        // <%= %> do EJS escreve " como &#34;
+        // <%= %> of EJS writes " as &#34;
         assert.ok(html.replace(/&#34;/g, '&quot;').includes(`<span class="name">${escapeHtml(bam.appName)}</span>`), `${sid}: appName escapado (<%= %>)`);
         assert.ok(html.includes(`<span>${escapeHtml(users[1].name)}</span>`), `${sid}: nickname escapado`);
     }
@@ -198,7 +201,7 @@ test('escolha de perfil (/prfchs): opcao de remover em cada perfil so com mais d
     } finally { users.push(...resto); }
 });
 
-// duble do jQuery so com o que a confirmacao usa
+// jQuery double with only what the confirmation uses.
 function fakeJquery(state, nickname) {
     return sel => ({
         attr: name => (name === 'id' && sel === '.focused' ? state.focused : undefined),
@@ -240,8 +243,9 @@ test('confirmacao de remocao: nickname e erro entram por texto; um POST com o id
     assert.equal(state.focused, 'remove1', 'o foco volta a opcao de remover');
 });
 
-// avatarHtml embute o arquivo nomeado no campo em <img src=data:>, com o tipo
-// pela extensao; sem arquivo ou fora do formato (SVG em linha inclusive), o padrao.
+// avatarHtml embeds the file named in the field in <img src=data:>, with the
+// type by extension; without a file or out of format (inline SVG included),
+// the default.
 test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">; SVG em linha e nome fora do formato caem no padrao', () => {
     const { avatarHtml, DEFAULT_AVATAR_SVG, AVATAR_COLORS, MAX_AVATAR_BYTES } = require('../src/modules/profile-manager/avatar');
     const only = html => {
@@ -256,26 +260,27 @@ test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">;
     put('cor.svg', AVATAR_COLORS[2].svg);
     assert.equal(svgOf(avatarHtml('cor.svg')), AVATAR_COLORS[2].svg);
     assert.equal(svgOf(avatarHtml('hostil.svg')), HOSTILE_AVATAR);
-    // SVG sem xmlns no arquivo (o AoP grava com ele): recusado como o icone do
-    // BAM, vale o padrao
+    // SVG without xmlns in the file (the AoP writes it with one): refused as
+    // the BAM icon, the default applies.
     put('sem-ns.svg', '<svg viewBox="0 0 1 1"/>');
     assert.equal(svgOf(avatarHtml('sem-ns.svg')), DEFAULT_AVATAR_SVG);
-    // outras extensoes do contrato: tipo pela extensao, bytes intactos
+    // The other extensions of the contract: type by extension, bytes intact.
     const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff, 0x10]);
     for (const [name, mime] of [['p.png', 'image/png'], ['j.jpg', 'image/jpeg'], ['k.jpeg', 'image/jpeg'], ['w.webp', 'image/webp']]) {
         put(name, bytes);
         assert.equal(only(avatarHtml(name)), `data:${mime};base64,${bytes.toString('base64')}`, name);
     }
 
-    // o padrao: ausente, SVG em linha, nome fora do formato, arquivo
-    // inexistente, SVG sem <svg>, diretorio, acima do teto
+    // The default: absent, inline SVG, name out of format, nonexistent file,
+    // SVG without <svg>, directory, above the limit.
     put('vazio.svg', 'nao e svg');
     put('grande.svg', `<svg xmlns="${SVG_NS}">${' '.repeat(MAX_AVATAR_BYTES)}</svg>`);
     fs.mkdirSync(path.join(THUMBS, 'pasta.svg'));
     fs.writeFileSync(path.join(USER_DATA, 'fora.svg'), AVATAR_COLORS[4].svg);
     put('x.gif', 'GIF');
     put('.oculto.svg', AVATAR_COLORS[5].svg);
-    // ...sem linha de erro no log: nenhum destes e falha da plataforma
+    // ...without an error line in the log: none of these is a platform
+    // failure.
     const logs = [];
     const errorOrig = console.error;
     console.error = (...a) => logs.push(a.join(' '));
@@ -287,17 +292,19 @@ test('avatarHtml: arquivo do avatar ou o padrao, sempre em <img class="avatar">;
         }
     } finally { console.error = errorOrig; }
     assert.deepEqual(logs, []);
-    // link simbolico para fora do diretorio: o padrao (no Windows sem
-    // privilegio de link, a criacao falha e o caso nao roda)
+    // A symbolic link outside the directory: the default (on Windows without
+    // link privilege, the creation fails and the case does not run).
     let linked = false;
-    try { fs.symlinkSync(path.join(USER_DATA, 'fora.svg'), path.join(THUMBS, 'link.svg')); linked = true; } catch { /* sem privilegio */ }
+    // Without link privilege, symlinkSync throws.
+    try { fs.symlinkSync(path.join(USER_DATA, 'fora.svg'), path.join(THUMBS, 'link.svg')); linked = true; } catch { }
     if (linked) assert.equal(svgOf(avatarHtml('link.svg')), DEFAULT_AVATAR_SVG, 'link para fora');
 });
 
-// --- cores no <style> e id na query --------------------------------------------
-// O escape de HTML do <%= %> nao impede CSS: BAM so #RRGGBB (Tabela 6), genero
-// #RRGGBB ou #RRGGBBAA; fora disso, o padrao da view. selectService e
-// selectProfile codificam o ?id= ("&", "#", "+" ou "%" cortariam o id).
+// --- colors in <style> and id in the query -----------------------------------
+// The HTML escaping of <%= %> does not stop CSS: BAM only #RRGGBB (Table 6),
+// genre #RRGGBB or #RRGGBBAA; otherwise, the default of the view.
+// selectService and selectProfile encode the ?id= ("&", "#", "+" or "%"
+// would cut the id).
 const { cssHexColor } = require('../src/html');
 const vm = require('vm');
 
@@ -313,7 +320,7 @@ test('cssHexColor: so "#" e 6 hexadecimais (8 com alpha); o resto vira o fallbac
     }
 });
 
-// as tres variaveis de cor do <style> da aplicacao de abertura
+// The three color variables of the <style> of the opening application.
 function styleVars(html) {
     const style = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
     const get = n => (new RegExp(`--${n}:[ \\t]*([^;]*);`).exec(style) || [])[1];
@@ -328,7 +335,8 @@ test('aplicacao de abertura (/btpapp): cor do BAM ou do genero fora do formato n
     const slsOrig = fakeCore.getServiceSLS;
     const currentOrig = currentService;
     const cases = [
-        // [backgroundColor, foregroundColor, cor do genero] -> [fundo, texto, genero]
+        // [backgroundColor, foregroundColor, genre color] -> [background, text,
+        // genre]
         [[INJ_CSS, INJ_CSS2, INJ_CSS], ['#282828', '#c8c8c8', 'transparent']],
         [['#0FF', '00FFFF', 'blue'], ['#282828', '#c8c8c8', 'transparent']],
         [['#00FFFF80', '#00FFFF;', '#07812cff; } x {'], ['#282828', '#c8c8c8', 'transparent']],
@@ -346,7 +354,7 @@ test('aplicacao de abertura (/btpapp): cor do BAM ou do genero fora do formato n
             assert.deepEqual([v.bg, v.fg, v.genre], expected, what);
             assert.ok(!/atacante|display: none|--x:|--y:/.test(v.style), `CSS injetado no <style>: ${what}`);
         }
-        // sem ESG: genero transparente
+        // Without ESG: transparent genre.
         fakeCore.getServiceSLS = () => ({});
         assert.equal(styleVars(await page('/btpapp')).genre, 'transparent');
     } finally {
@@ -356,8 +364,8 @@ test('aplicacao de abertura (/btpapp): cor do BAM ou do genero fora do formato n
     }
 });
 
-// roda os <script> em linha da pagina com um fetch de mentira e chama a funcao
-// de selecao; devolve as URLs pedidas
+// Runs the inline <script>s of the page with a fake fetch and calls the
+// selection function; returns the requested URLs.
 function selectUrls(html, fn, arg) {
     const urls = [];
     const ctx = vm.createContext({ fetch: u => { urls.push(u); return Promise.resolve(); }, document: { addEventListener() {} }, navigate() {} });

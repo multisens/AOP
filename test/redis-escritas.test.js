@@ -1,6 +1,7 @@
-// Teste ESTATICO: a plataforma so grava no Redis pelo adaptador
-// src/redis-funcoes.js. Regras e familias vem de infra/redis (test/escritas.js,
-// esquema.json): precisa do TV30 com os submodulos (aop/ ao lado de infra/).
+// STATIC test: the platform writes to Redis only through the adapter
+// src/redis-funcoes.js. Rules and families come from infra/redis
+// (test/escritas.js, esquema.json): needs TV30 with the submodules (aop/
+// next to infra/).
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
