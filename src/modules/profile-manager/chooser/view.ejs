@@ -59,6 +59,7 @@
                 gap: 1vw;
 
                 .card {
+                    position: relative;
                     background-color: rgb(45, 45, 45);
                     color: rgb(200,200,200);
                     border-radius: 1vh;
@@ -77,6 +78,66 @@
                         margin-left: auto;
                         margin-right: auto;
                     }
+                }
+
+                .remove {
+                    position: absolute;
+                    top: calc(100% + 1.5vh);
+                    left: 15%;
+                    width: 70%;
+                    padding: 0.6vh 0;
+                    border-radius: 1vh;
+                    background-color: rgb(45, 45, 45);
+                    color: rgb(200,200,200);
+                    font-size: calc(0.7vw + 0.4vh);
+                    text-align: center;
+                }
+            }
+
+            .confirm {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background-color: rgba(0, 0, 0, 0.85);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .confirm-box {
+                width: 50%;
+                padding: 4vh 3vw;
+                border-radius: 1vh;
+                background-color: rgb(45, 45, 45);
+                color: rgb(200,200,200);
+                font-size: calc(0.8vw + 0.5vh);
+                text-align: center;
+                display: flex;
+                flex-direction: column;
+                gap: 2vh;
+            }
+
+            #confirm-title {
+                color: rgb(255,255,255);
+                font-size: calc(1.3vw + 0.5vh);
+            }
+
+            #confirm-error {
+                color: rgb(255, 120, 120);
+                min-height: 1em;
+            }
+
+            .confirm-actions {
+                display: flex;
+                justify-content: center;
+                gap: 2vw;
+
+                > div {
+                    padding: 1vh 2vw;
+                    border-radius: 1vh;
+                    background-color: rgb(70, 70, 70);
                 }
             }
 
@@ -97,7 +158,19 @@
 
             <span id="disclaimer">In compliance with the General Data Protection Regulation (GDPR), each broadcaster will ask <br/> your permission if they wish to use your profile data or collect other personal data</span>
         </div>
-    
+
+        <div id="confirm" class="confirm" style="display: none;">
+            <div class="confirm-box">
+                <span id="confirm-title">Remove the profile <span id="confirm-name"></span>?</span>
+                <span>All data of this profile will be discarded: its settings, its visibility to broadcasters, the data broadcasters saved for it and its avatar. This cannot be undone.</span>
+                <span id="confirm-error"></span>
+                <div class="confirm-actions">
+                    <div id="confirm-cancel" moveright="confirm-remove" select="closeRemoval">Cancel</div>
+                    <div id="confirm-remove" moveleft="confirm-cancel" select="removeProfile">Remove</div>
+                </div>
+            </div>
+        </div>
+
         <script>
             const DEFAULT_AVATAR_SVG = <%- JSON.stringify(defaultAvatar) %>;
 
@@ -105,7 +178,13 @@
                 el.outerHTML = DEFAULT_AVATAR_SVG;
             }
 
-            document.addEventListener('keydown', (e) => {navigate(e.key)});
+            document.addEventListener('keydown', (e) => {
+                if (pendingRemoval && e.key === 'Escape') {
+                    closeRemoval();
+                    return;
+                }
+                navigate(e.key);
+            });
 
             function createProfile() {
                 fetch('<%= basepath %>/create');
@@ -113,6 +192,54 @@
 
             function selectProfile(uid) {
                 fetch(`<%= basepath %>/select?id=${encodeURIComponent(uid)}`);
+            }
+
+            // remocao: { id, from (foco a devolver), sent }
+            let pendingRemoval = null;
+
+            function focusOn(id) {
+                $('.focused').removeClass('focused');
+                $(`#${id}`).addClass('focused');
+            }
+
+            // o nickname entra por texto, nunca como HTML
+            function confirmRemoval(uid) {
+                const from = $('.focused');
+                pendingRemoval = { id: uid, from: from.attr('id'), sent: false };
+                $('#confirm-name').text(from.closest('.card').children('span').first().text());
+                $('#confirm-error').text('');
+                $('#confirm').css('display', 'flex');
+                focusOn('confirm-cancel');
+            }
+
+            function closeRemoval() {
+                if (!pendingRemoval) return;
+                $('#confirm').css('display', 'none');
+                focusOn(pendingRemoval.from);
+                pendingRemoval = null;
+            }
+
+            // removido, a plataforma volta ao seletor de perfil e recarrega esta tela
+            function removeProfile() {
+                if (!pendingRemoval || pendingRemoval.sent) return;
+                pendingRemoval.sent = true;
+                fetch('/profile/remove', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: pendingRemoval.id })
+                })
+                .then(async (response) => {
+                    if (response.ok) return;
+                    // 400 traz {error: mensagem}; falha da plataforma traz
+                    // {error: 200, description} (formato C.3.2)
+                    const data = await response.json().catch(() => ({}));
+                    const msg = typeof data.error === 'string' ? data.error : data.description;
+                    throw new Error(msg || ('HTTP ' + response.status));
+                })
+                .catch(error => {
+                    $('#confirm-error').text(error.message);
+                    if (pendingRemoval) pendingRemoval.sent = false;
+                });
             }
         </script>
   </body>

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "test": "node --test test/redis.test.js test/app-hosts.test.js test/redis-escritas.test.js test/mqtt-ws.test.js test/popup.test.js test/views-escape.test.js",
+    "test": "node --test test/redis.test.js test/app-hosts.test.js test/redis-escritas.test.js test/mqtt-ws.test.js test/popup.test.js test/views-escape.test.js test/lls.test.js",
     "start": "node ./src/server.js",
     "dev": "nodemon --exec node src/server.js"
   },

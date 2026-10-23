@@ -5,6 +5,7 @@ const redis = require('./redis-client');
 const funcoes = require('./redis-funcoes');
 const { whenReady } = require('./redis-options');
 const profiles = require('./modules/profile-manager/service');
+const lls = require('./modules/transport-layer-metadata-lls');
 const appHosts = require('./app-hosts');
 
 // Origem propria de cada aplicacao (./app-hosts.js); o server.js ja a validou.
@@ -32,6 +33,7 @@ const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {
     clean : true,
     connectTimeout : 4000,
 });
+lls.start((topic, message) => client.publish(topic, message, { retain : true }));
 
 const DATA = {
     rxgui: {
@@ -44,7 +46,6 @@ const DATA = {
     currentUser: '',
     users: [],
     currentService: '',
-    serviceList: new Map(),
     serviceMetadata: {}
 };
 
@@ -57,8 +58,8 @@ const GUI = {
 
 const _t = {
     current_user: 'aop/currentUser',
+    removed_user: 'aop/removedUser',
     current_service: 'aop/currentService',
-    lls_metadata: 'tlm/lls/#',
     sls_metadata: 'tlm/sls/+/#',
     gui_layer: 'aop/display/layers/rxgui',
     pmplayer_url : 'aop/display/layers/video/url',
@@ -69,7 +70,7 @@ const _t = {
 const _topics = new Map([
     [_t.current_user, loadCurrentUser],
     [_t.current_service, loadCurrentService],
-    [_t.lls_metadata, loadLLSMetadata]
+    [lls.TOPIC, lls.receive]
 ]);
 
 client.on('connect', () => {
@@ -165,10 +166,14 @@ function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
 }
 
 // Perfis lidos direto do armazenamento: a restricao de divulgacao da C.6.14.1
-// vale para clientes da API; o gestor de perfis da plataforma ve todos.
-// Falha do Redis rejeita (rota HTTP: 404 {error:200}).
+// vale para clientes da API; o gestor de perfis da plataforma ve todos. Base
+// sem perfil ganha o perfil padrao. Falha do Redis rejeita (rota HTTP: 404 {error:200}).
 async function refreshUserData() {
-    const ids = await redis.smembers('users:index');
+    let ids = await redis.smembers('users:index');
+    if (ids.length === 0) {
+        await profiles.ensureDefaultProfile();
+        ids = await redis.smembers('users:index');
+    }
 
     const details = await Promise.all(ids.map(async id => {
         const d = await redis.hgetall(`user:${id}`);
@@ -177,17 +182,17 @@ async function refreshUserData() {
 
     DATA.users.length = 0;
     details.forEach(u => DATA.users.push(u));
-
-    if (DATA.users.length > 0 && !DATA.currentUser) {
-        await setCurrentUser(DATA.users[0].id);
-    }
     console.log(`Loaded ${DATA.users.length} users from Redis`);
 }
 
-// Caminho do boot/MQTT (sem rota para responder): tenta de novo e loga.
+// Caminho do boot/MQTT (sem rota para responder): tenta de novo e loga. Sem
+// perfil corrente, o primeiro; depois disso, so a escolha no seletor o define.
 async function loadUserData(attempt = 1) {
     try {
         await refreshUserData();
+        if (DATA.users.length > 0 && !DATA.currentUser) {
+            await setCurrentUser(DATA.users[0].id);
+        }
     } catch (err) {
         // Redis pode demorar pra subir: retry, no maximo 5x, com backoff.
         if (attempt < 5) {
@@ -223,6 +228,20 @@ function getCurrentUser() {
     return DATA.currentUser;
 }
 
+// Perfil ja removido do armazenamento: o corrente removido deixa
+// aop/currentUser vazio ate a escolha no seletor; a remocao vai a
+// aop/removedUser, e a plataforma volta ao seletor de perfil.
+function profileRemoved(uid) {
+    const i = DATA.users.findIndex(u => u.id === uid);
+    if (i >= 0) DATA.users.splice(i, 1);
+    if (uid === DATA.currentUser) {
+        DATA.currentUser = '';
+        client.publish(_t.current_user, '', { retain : true });
+    }
+    client.publish(_t.removed_user, uid);
+    setDisplayGui(GUI.profile_chooser);
+}
+
 function getUserData(uid) {
     let result = {};
     DATA.users.forEach(usr => {
@@ -254,34 +273,9 @@ function unsetCurrentService() {
     DATA.serviceMetadata = {};
 }
 
+// { serviceContextId, bam } do servico corrente, pela LLS recebida
 function getCurrentService() {
-    return DATA.serviceList.get(DATA.currentService);
-}
-
-function loadLLSMetadata(meta, topic) {
-    if (!meta || meta == '') {
-        DATA.serviceList.clear();
-        client.unsubscribe(_t.lls_metadata, { noLocal : true });
-        client.subscribe(_t.lls_metadata, { noLocal : true });
-        return;
-    }
-
-    let lls = topic.split('/').at(-1);
-    let t = JSON.parse(meta);
-    if (lls == 'bamt') {
-        t.forEach(bam => {
-            if (DATA.serviceList.has(bam.globalServiceId)) {
-                DATA.serviceList.get(bam.globalServiceId).bam = bam;
-            }
-            else {
-                DATA.serviceList.set(bam.globalServiceId, { bam: bam });
-            }
-        });
-    }
-}
-
-function getServiceList() {
-	return DATA.serviceList;
+    return lls.service(DATA.currentService);
 }
 
 function loadSLSMetadata(meta, topic) {
@@ -355,12 +349,12 @@ module.exports = {
     setVideoSize,
     setCurrentUser,
     getCurrentUser,
+    profileRemoved,
     getUserData,
     getUserList,
     setCurrentService,
     unsetCurrentService,
     getCurrentService,
-    getServiceList,
     getServiceSLS,
     setBALDHandler,
     getGraphicsApp,

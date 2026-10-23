@@ -37,8 +37,11 @@ const setOf = k => (store.get(k) instanceof Set ? store.get(k) : new Set());
 // O duble imita o EFEITO das funcoes de perfil (call('FCALL', funcao, 0, ...)),
 // sem conferir o esquema (testado no Redis real, infra/redis/test); fcalls
 // guarda cada chamada e recusa faz a funcao responder como a dado fora do esquema.
+// O teto de perfis e o maxMembros de users:index, com a recusa da funcao.
 const fcalls = [];
 let recusa = null;   // [funcao, mensagem]
+const TETO = 5;
+const recusaDoTeto = id => `TV30ESQUEMA tv30_perfil_grava: users:index teto de ${TETO} perfis atingido (10.3.3): "${id}" nao gravado`;
 const fakeRedis = new Proxy({
     async call(cmd, nome, numkeys, ...args) {
         if (cmd !== 'FCALL' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${numkeys}: nao suportado pelo duble`);
@@ -57,7 +60,9 @@ const fakeRedis = new Proxy({
                 const k = Number(n);
                 const h = {};
                 for (let i = 2 + k; i + 1 < a.length; i += 2) h[a[i]] = a[i + 1];
-                const idx = setOf('users:index'); idx.add(id); store.set('users:index', idx);
+                const idx = setOf('users:index');
+                if (!idx.has(id) && idx.size >= TETO) throw new Error(recusaDoTeto(id));
+                idx.add(id); store.set('users:index', idx);
                 store.set(`user:${id}`, h);
                 if (k > 0) { const s = setOf(`user:${id}:consent`); a.slice(2, 2 + k).forEach(x => s.add(x)); store.set(`user:${id}:consent`, s); }
                 return 1;
@@ -95,7 +100,8 @@ function stub(rel, exports) {
 }
 stub('redis-client', fakeRedis);
 const refreshed = [];
-stub('core', { refreshUserData: async () => { refreshed.push(1); } });
+const removidos = [];   // ids passados a core.profileRemoved
+stub('core', { refreshUserData: async () => { refreshed.push(1); }, profileRemoved: id => { removidos.push(id); } });
 
 const profiles = require('../src/modules/profile-manager/service');
 const managerRouter = require('../src/modules/profile-manager/manager');
@@ -264,7 +270,7 @@ test('createProfile: UMA chamada tv30_perfil_grava com a visibilidade do servico
     assert.notEqual(outro.id, user.id);
 });
 
-test('limite de cinco: o sexto perfil e recusado (ValidationError), sem despejo nem gravacao', async () => {
+test('limite de cinco: a recusa da funcao que grava vira ValidationError com a mensagem da tela, sem despejo', async () => {
     store.clear();
     fcalls.length = 0;
     const idx = new Set();
@@ -275,10 +281,19 @@ test('limite de cinco: o sexto perfil e recusado (ValidationError), sem despejo 
     store.set(`user:${perfil(3)}:broadcaster-attrs:urn:s`, { a: '1' });
     store.set('users:index', idx);
     await assert.rejects(profiles.createProfile({ nickname: 'Sexto' }),
-        err => err instanceof profiles.ValidationError && /limite de 5 perfis/.test(err.message));
-    assert.deepEqual(fcalls, [], 'nenhuma funcao do Redis chamada');
+        err => err instanceof profiles.ValidationError && err.message === 'O limite de 5 perfis foi atingido. O perfil não foi criado.');
+    assert.deepEqual(fcalls.map(c => c[0]), ['tv30_perfil_grava'], 'sem leitura previa: a conferencia e da funcao');
     assert.equal(setOf('users:index').size, 5);
     assert.equal(store.has(`user:${perfil(3)}:broadcaster-attrs:urn:s`), true);
+
+    // o teto da mensagem e o da recusa; outra recusa da funcao segue defeito
+    recusa = ['tv30_perfil_grava', 'TV30ESQUEMA tv30_perfil_grava: users:index teto de 3 perfis atingido (10.3.3): "x" nao gravado'];
+    try {
+        await assert.rejects(profiles.createProfile({ nickname: 'Outro' }),
+            err => err instanceof profiles.ValidationError && err.message === 'O limite de 3 perfis foi atingido. O perfil não foi criado.');
+        recusa = ['tv30_perfil_grava', 'TV30ESQUEMA tv30_perfil_grava: users:index no Redis e string, o esquema pede set (nada gravado)'];
+        await assert.rejects(profiles.createProfile({ nickname: 'Outro' }), err => !(err instanceof profiles.ValidationError) && /no Redis e string/.test(err.message));
+    } finally { recusa = null; }
 
     // com quatro, o quinto e criado
     idx.delete(perfil(5));
@@ -402,7 +417,7 @@ test('perfil recusado pela funcao apaga o arquivo; falha ao gravar o arquivo nao
     } finally { fs.rmSync(THUMBS, { force: true }); }
 });
 
-test('o sexto perfil recusado nao grava arquivo de avatar; POST /profile/create responde 400 com a mensagem', async () => {
+test('o sexto perfil recusado pela funcao nao deixa arquivo de avatar; POST /profile/create responde 400 com a mensagem', async () => {
     store.clear();
     fcalls.length = 0;
     fs.rmSync(THUMBS, { recursive: true, force: true });
@@ -420,10 +435,144 @@ test('o sexto perfil recusado nao grava arquivo de avatar; POST /profile/create 
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nickname: 'Sexto' }),
         });
         assert.equal(r.status, 400);
-        assert.match((await r.json()).error, /limite de 5 perfis/);
+        assert.equal((await r.json()).error, 'O limite de 5 perfis foi atingido. O perfil não foi criado.');
     });
     assert.deepEqual(thumbFiles(), antes);
+    assert.deepEqual(fcalls.map(c => c[0]), ['tv30_perfil_grava']);
+});
+
+// --- remocao pelo telespectador e perfil padrao ---------------------------------
+const perfilNoDuble = (id, campos = {}) => {
+    store.set('users:index', setOf('users:index').add(id));
+    store.set(`user:${id}`, { id, nickname: `N${id.slice(-2)}`, ...campos });
+};
+
+test('removeProfile: o unico perfil registrado e o perfil inexistente nao sao removidos (ValidationError, nada chamado)', async () => {
+    store.clear();
+    fcalls.length = 0;
+    perfilNoDuble(UM);
+    await assert.rejects(profiles.removeProfile(UM),
+        err => err instanceof profiles.ValidationError && err.message === 'The only registered profile cannot be removed.');
+    for (const id of [perfil(9), '', undefined]) {
+        await assert.rejects(profiles.removeProfile(id),
+            err => err instanceof profiles.ValidationError && err.message === 'This profile no longer exists.', String(id));
+    }
     assert.deepEqual(fcalls, []);
+    assert.ok(store.has(`user:${UM}`));
+});
+
+test('removeProfile: perfil, visibilidade e atributos de emissora pela tv30_perfil_remove, depois o arquivo do avatar; arquivo de outro perfil fica', async () => {
+    store.clear();
+    fcalls.length = 0;
+    fs.rmSync(THUMBS, { recursive: true, force: true });
+    fs.mkdirSync(THUMBS, { recursive: true });
+    const [A, B, C] = [perfil(1), perfil(2), perfil(3)];
+    perfilNoDuble(A, { avatar: `${A}.svg` });
+    store.set(`user:${A}:consent`, new Set(['urn:s']));
+    store.set(`user:${A}:broadcaster-attrs:urn:s`, { cor: 'azul' });
+    store.set(`user:${A}:broadcaster-attrs:urn:t`, { k: 'v' });
+    perfilNoDuble(B, { avatar: 'compartilhado.png' });
+    perfilNoDuble(C, { avatar: 'compartilhado.png' });
+    for (const f of [`${A}.svg`, 'compartilhado.png']) fs.writeFileSync(path.join(THUMBS, f), 'x');
+
+    assert.deepEqual(await profiles.removeProfile(A), { id: A });
+    assert.deepEqual(fcalls, [['tv30_perfil_remove', A]]);
+    assert.deepEqual([...store.keys()].filter(k => k.startsWith(`user:${A}`)), []);
+    assert.equal(setOf('users:index').has(A), false);
+    assert.deepEqual(thumbFiles(), ['compartilhado.png'], 'o arquivo do avatar do removido nao existe mais');
+
+    // C ainda nomeia o arquivo de B: fica
+    await profiles.removeProfile(B);
+    assert.deepEqual(thumbFiles(), ['compartilhado.png']);
+    // C ficou so
+    await assert.rejects(profiles.removeProfile(C), /only registered profile/);
+    assert.deepEqual([...setOf('users:index')], [C]);
+});
+
+test('removeProfile: duas remocoes ao mesmo tempo com dois perfis deixam um perfil', async () => {
+    store.clear();
+    fcalls.length = 0;
+    perfilNoDuble(perfil(1));
+    perfilNoDuble(perfil(2));
+    const r = await Promise.allSettled([profiles.removeProfile(perfil(1)), profiles.removeProfile(perfil(2))]);
+    assert.deepEqual(r.map(x => x.status).sort(), ['fulfilled', 'rejected']);
+    assert.ok(r.find(x => x.status === 'rejected').reason instanceof profiles.ValidationError);
+    assert.equal(setOf('users:index').size, 1);
+});
+
+test('com cinco perfis, remover um permite criar outro', async () => {
+    store.clear();
+    fs.rmSync(THUMBS, { recursive: true, force: true });
+    const ids = [];
+    for (let i = 1; i <= 5; i++) ids.push((await profiles.createProfile({ nickname: `P${i}` })).user.id);
+    await assert.rejects(profiles.createProfile({ nickname: 'Sexto' }), profiles.ValidationError);
+    await profiles.removeProfile(ids[2]);
+    const { user } = await profiles.createProfile({ nickname: 'Sexto' });
+    assert.equal(setOf('users:index').size, 5);
+    assert.ok(setOf('users:index').has(user.id));
+    assert.deepEqual(thumbFiles(), [...setOf('users:index')].map(id => `${id}.svg`).sort());
+});
+
+test('POST /profile/remove: 400 com a mensagem (perfil unico, inexistente); Redis fora 404 {error:200}; ok 200 e core.profileRemoved', async () => {
+    store.clear();
+    removidos.length = 0;
+    perfilNoDuble(UM);
+    await withApp(app => app.use('/profile', managerRouter), async base => {
+        const post = body => fetch(`${base}/profile/remove`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        let r = await post({ id: UM });
+        assert.equal(r.status, 400);
+        assert.deepEqual(await r.json(), { error: 'The only registered profile cannot be removed.' });
+        r = await post({});
+        assert.equal(r.status, 400);
+        assert.deepEqual(await r.json(), { error: 'This profile no longer exists.' });
+
+        perfilNoDuble(perfil(1));
+        down = true;
+        try {
+            r = await post({ id: UM });
+            assert.equal(r.status, 404);
+            assert.equal((await r.json()).error, 200);
+        } finally { down = false; }
+        assert.deepEqual(removidos, []);
+
+        r = await post({ id: UM });
+        assert.equal(r.status, 200);
+        assert.deepEqual(await r.json(), { id: UM });
+        assert.deepEqual(removidos, [UM], 'o core publica a remocao e volta ao seletor');
+        assert.equal(store.has(`user:${UM}`), false);
+    });
+});
+
+test('ensureDefaultProfile: base vazia ganha um perfil com os padroes da Tabela 7, id UUID e nickname Viewer 1, sem visibilidade; com perfil, nada', async () => {
+    store.clear();
+    fcalls.length = 0;
+    const p = await profiles.ensureDefaultProfile();
+    assert.match(p.id, UUID_RE);
+    assert.equal(p.nickname, 'Viewer 1');
+    assert.equal(fcalls.length, 1);
+    const [nome, id, n] = fcalls[0];
+    assert.equal(nome, 'tv30_perfil_grava');
+    assert.equal(id, p.id);
+    assert.equal(n, '0', 'sem visibilidade para servico algum');
+    const h = hashOfCall(fcalls[0]);
+    const { lastAccess, ...basicos } = h;
+    assert.match(lastAccess, /^[1-9]\d*$/);
+    assert.deepEqual(basicos, {
+        id: p.id, nickname: 'Viewer 1', parentalControl: 'false', closedCaptioning: 'false', closedSigning: 'false',
+        audioDescription: 'false', dialogEnhancement: 'false', voiceGuidance: 'false',
+    });
+
+    fcalls.length = 0;
+    assert.equal(await profiles.ensureDefaultProfile(), null);
+    assert.deepEqual(fcalls, []);
+
+    // duas chamadas ao mesmo tempo numa base vazia: um perfil so
+    store.clear();
+    const r = await Promise.all([profiles.ensureDefaultProfile(), profiles.ensureDefaultProfile()]);
+    assert.equal(r.filter(Boolean).length, 1);
+    assert.equal(setOf('users:index').size, 1);
 });
 
 test('platformErrorHandler: excecao em rota async vira 404 {error:200}', async () => {

@@ -1,6 +1,8 @@
 // Testes de src/app-hosts.js e do registro da origem em src/core.js (MQTT e
 // Redis dubles): rotulo, origem, Host, origins:associated, proxy por Host e
 // redirecionamento de /graphicsAppProxy. O "bcast" e um servidor HTTP local.
+// Tambem o perfil corrente no core (perfil padrao na subida e remocao de
+// perfil) e a LLS entregue a unidade dona da lista de servicos.
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
@@ -26,10 +28,12 @@ const fakeRedis = {
     once() {},
     on() {},
 };
-// O duble imita o EFEITO das funcoes de origem (call('FCALL', funcao, 0, ...)),
-// sem conferir o esquema (testado no Redis real, infra/redis/test); o lastAccess
-// de perfil desconhecido da 0.
+// O duble imita o EFEITO das funcoes de origem e de perfil (call('FCALL',
+// funcao, 0, ...)), sem conferir o esquema (testado no Redis real,
+// infra/redis/test); o lastAccess de perfil desconhecido da 0.
 const ORIGENS = 'origins:associated';
+const INDICE = 'users:index';
+const indice = () => (store.get(INDICE) instanceof Set ? store.get(INDICE) : new Set());
 let recusa = null;   // [funcao, mensagem]: a funcao responde como a dado fora do esquema
 for (const [name, fn] of Object.entries({
     async call(cmd, nome, numkeys, ...args) {
@@ -42,20 +46,30 @@ for (const [name, fn] of Object.entries({
             case 'tv30_origens_limpa': return store.delete(ORIGENS) ? 1 : 0;
             case 'tv30_origem_registra': h.set(a[0], a[1]); store.set(ORIGENS, h); return 1;
             case 'tv30_origem_remove': return h.delete(a[0]) ? 1 : 0;
-            case 'tv30_perfil_ultimo_acesso': return 0;
+            case 'tv30_perfil_grava': {
+                const [id, n] = a;
+                const campos = new Map();
+                for (let i = 2 + Number(n); i + 1 < a.length; i += 2) campos.set(a[i], a[i + 1]);
+                store.set(INDICE, indice().add(id));
+                store.set(`user:${id}`, campos);
+                return 1;
+            }
+            case 'tv30_perfil_ultimo_acesso': return indice().has(a[0]) ? 1 : 0;
+            // a lista dos servicos anunciados, gravada na partida do core
+            case 'tv30_servicos_anunciados': store.set('services:announced', new Set(a)); return new Set(a).size;
             default: throw new Error('ERR Function not found');
         }
     },
-    async smembers() { return []; },
+    async smembers(k) { return k === INDICE ? [...indice()] : []; },
     async hgetall(k) { return Object.fromEntries(hashOf(k)); },
 })) {
     fakeRedis[name] = async (...args) => { if (down) throw new Error(FAIL); return fn(...args); };
 }
 const origins = () => Object.fromEntries(hashOf('origins:associated'));
 
-const published = [];   // [topico, mensagem]
+const published = [];   // [topico, mensagem, retido]
 const fakeMqtt = new EventEmitter();
-fakeMqtt.publish = (t, m) => { published.push([t, String(m)]); };
+fakeMqtt.publish = (t, m, o) => { published.push([t, String(m), !!(o && o.retain)]); };
 fakeMqtt.subscribe = () => undefined;
 fakeMqtt.unsubscribe = () => undefined;
 const lastGraphics = () => {
@@ -192,6 +206,72 @@ test('hostLabel: so o que esta no dominio das aplicacoes; porta e caixa nao impo
 test('boot: a limpeza de origins:associated apaga a origem orfa', async () => {
     await new Promise(r => setImmediate(r));
     assert.deepEqual(origins(), {});
+});
+
+// --- perfil corrente (core) -----------------------------------------------------
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+async function ate(cond) {
+    for (let i = 0; i < 200 && !cond(); i++) await new Promise(r => setTimeout(r, 5));
+    assert.ok(cond(), 'condicao nao atingida');
+}
+function perfilNoDuble(id, nickname) {
+    store.set(INDICE, indice().add(id));
+    store.set(`user:${id}`, new Map([['id', id], ['nickname', nickname]]));
+}
+function tiraDoDuble(id) {
+    indice().delete(id);
+    store.delete(`user:${id}`);
+}
+
+test('boot com a base sem perfil: o gestor cria o perfil padrao (Viewer 1, id UUID), que vira o perfil corrente', async () => {
+    await ate(() => core.getUserList().length === 1 && core.getCurrentUser() !== '');
+    const [u] = core.getUserList();
+    assert.equal(u.name, 'Viewer 1');
+    assert.match(u.id, UUID_RE);
+    assert.equal(core.getCurrentUser(), u.id);
+    const grava = writes.filter(w => w[1] === 'tv30_perfil_grava');
+    assert.equal(grava.length, 1, 'um perfil padrao so');
+    assert.equal(grava[0][3], '0', 'sem visibilidade para servico algum');
+    assert.ok(published.some(([t, m, ret]) => t === 'aop/currentUser' && m === u.id && ret));
+});
+
+test('remocao do perfil corrente: aop/currentUser vazio (retido), aop/removedUser com o id e volta ao seletor; o corrente passa ao escolhido', async () => {
+    const atual = core.getCurrentUser();
+    const B = '5a9d2f4e-1c3b-4d6a-8e7f-9b0c1d2e3f4a';
+    const C = '9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
+    perfilNoDuble(B, 'B');
+    perfilNoDuble(C, 'C');
+    await core.refreshUserData();
+    assert.equal(core.getUserList().length, 3);
+
+    // o armazenamento ja nao tem o perfil (tv30_perfil_remove) quando o core e avisado
+    tiraDoDuble(atual);
+    let n0 = published.length;
+    core.profileRemoved(atual);
+    assert.deepEqual(published.slice(n0), [
+        ['aop/currentUser', '', true],
+        ['aop/removedUser', atual, false],
+        ['aop/display/layers/rxgui', '/prfchs', false],
+    ]);
+    assert.equal(core.getCurrentUser(), '');
+    assert.deepEqual(core.getUserList().map(u => u.id).sort(), [B, C].sort());
+
+    // o seletor recarrega os perfis sem escolher um por conta propria
+    n0 = published.length;
+    await core.refreshUserData();
+    assert.equal(core.getCurrentUser(), '');
+    assert.deepEqual(published.slice(n0).filter(([t]) => t === 'aop/currentUser'), []);
+
+    await core.setCurrentUser(B);
+    assert.deepEqual(published.at(-1), ['aop/currentUser', B, true]);
+
+    // perfil que nao e o corrente: aop/currentUser fica
+    tiraDoDuble(C);
+    n0 = published.length;
+    core.profileRemoved(C);
+    assert.deepEqual(published.slice(n0), [['aop/removedUser', C, false], ['aop/display/layers/rxgui', '/prfchs', false]]);
+    assert.equal(core.getCurrentUser(), B);
+    assert.deepEqual(core.getUserList().map(u => u.id), [B]);
 });
 
 const SID = 'urn:tv30:service:users-test';
@@ -370,4 +450,23 @@ test('aplicacao fora do ar: host dela responde 502; sem aplicacao, /graphicsAppP
             assert.match(r.body, /nenhuma aplicacao em execucao/);
         });
     } finally { await core.setDisplayGraphics(); }
+});
+
+test('LLS no core: a BAMT vai a unidade dona, que grava services:announced e publica aop/services retido; o servico corrente sai dela', async () => {
+    const servicos = () => published.filter(([t]) => t === 'aop/services');
+    // na partida, antes de qualquer BAMT: a lista vazia
+    assert.deepEqual(servicos()[0], ['aop/services', '[]', true]);
+    const BAM = { globalServiceId: SID, appVersion: 1, appName: 'Users', appIcon: '<svg/>', bannerIcon: '<svg/>', backgroundColor: '#000000', foregroundColor: '#ffffff' };
+    fakeMqtt.emit('message', 'tlm/lls/bs-teste/bamt', Buffer.from(JSON.stringify([BAM])));
+    await ate(() => servicos().at(-1)[1] !== '[]');
+    assert.deepEqual(servicos().at(-1), ['aop/services', JSON.stringify([{ serviceContextId: SID }]), true]);
+    assert.deepEqual([...store.get('services:announced')], [SID]);
+    core.setCurrentService(SID);
+    assert.equal(core.getCurrentService().bam.appName, 'Users');
+    // BAMT retirada (mensagem vazia retida)
+    fakeMqtt.emit('message', 'tlm/lls/bs-teste/bamt', Buffer.from(''));
+    await ate(() => servicos().at(-1)[1] === '[]');
+    assert.equal(store.get('services:announced').size, 0);
+    assert.equal(core.getCurrentService(), undefined);
+    core.unsetCurrentService();
 });

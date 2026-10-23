@@ -73,10 +73,8 @@ async function writeAvatarFile(id, svg) {
     return name;
 }
 
-// Apaga <thumbs>/<id>.svg (criacao que falhou depois de gravar o arquivo);
-// ausente devolve false. Avatar com outro nome nao foi posto pelo gestor e fica.
-async function removeAvatarFile(id) {
-    const name = avatarFileName(id);
+// Apaga <thumbs>/<nome>; nome fora do formato ou arquivo ausente devolve false
+async function unlinkAvatarFile(name) {
     if (!isAvatarFileName(name)) return false;
     try {
         await fs.promises.unlink(path.join(thumbsDir(), name));
@@ -85,6 +83,12 @@ async function removeAvatarFile(id) {
         if (err && err.code === 'ENOENT') return false;
         throw err;
     }
+}
+
+// Apaga <thumbs>/<id>.svg (criacao que falhou depois de gravar o arquivo).
+// Avatar com outro nome nao foi posto pelo gestor e fica.
+function removeAvatarFile(id) {
+    return unlinkAvatarFile(avatarFileName(id));
 }
 
 // URL data: do arquivo do avatar; '' se o nome estiver fora do formato, se o
@@ -120,5 +124,5 @@ function avatarHtml(avatar) {
 module.exports = {
     svgAvatar, DEFAULT_AVATAR_HEX, DEFAULT_AVATAR_SVG, AVATAR_COLORS, avatarHtml,
     AVATAR_FILE_RE, AVATAR_MIME, MAX_AVATAR_BYTES, thumbsDir, isAvatarFileName, avatarFileName, avatarSvg,
-    writeAvatarFile, removeAvatarFile, avatarDataUri,
+    writeAvatarFile, unlinkAvatarFile, removeAvatarFile, avatarDataUri,
 };

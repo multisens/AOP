@@ -14,5 +14,5 @@ test('aop: escrita nas familias do alcance do Redis so pelo adaptador das funcoe
     const cfg = modulosTv30(path.join(__dirname, '..', '..')).aop;
     const r = verificaModuloJs({ ...cfg, raiz: path.join(__dirname, '..') });
     assert.deepEqual(r.violacoes, [], r.violacoes.join('\n'));
-    assert.deepEqual(r.adaptadorFuncoes, ['tv30_origem_registra', 'tv30_origem_remove', 'tv30_origens_limpa', 'tv30_perfil_grava', 'tv30_perfil_remove', 'tv30_perfil_ultimo_acesso']);
+    assert.deepEqual(r.adaptadorFuncoes, ['tv30_origem_registra', 'tv30_origem_remove', 'tv30_origens_limpa', 'tv30_perfil_grava', 'tv30_perfil_remove', 'tv30_perfil_ultimo_acesso', 'tv30_servicos_anunciados']);
 });

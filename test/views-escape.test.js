@@ -46,7 +46,6 @@ let currentService = HOSTILE.globalServiceId;
 const coreFile = require.resolve('../src/core');
 const fakeCore = {
     GUI: { app_catalogue: '/appcat', profile_chooser: '/prfchs', profile_creator: '/profile/create', bootstrap_app: '/btpapp' },
-    getServiceList: () => services,
     getUserData: uid => users.find(u => u.id == uid) || {},
     getCurrentUser: () => users[1].id,
     getUserList: () => users,
@@ -56,6 +55,10 @@ const fakeCore = {
     async refreshUserData() {},
 };
 const m = new Module(coreFile); m.filename = coreFile; m.loaded = true; m.exports = fakeCore; require.cache[coreFile] = m;
+// a unidade dona da lista de servicos (o catalogo le dela), sem Redis
+const llsFile = require.resolve('../src/modules/transport-layer-metadata-lls');
+const ml = new Module(llsFile); ml.filename = llsFile; ml.loaded = true; require.cache[llsFile] = ml;
+ml.exports = { services: async () => [...services].map(([serviceContextId, s]) => ({ serviceContextId, bam: s.bam })) };
 
 let server;
 let base = '';
@@ -178,6 +181,63 @@ test('escolha de perfil (/prfchs): nickname e id escapados; avatares como <img> 
     const { DEFAULT_AVATAR_SVG } = require('../src/modules/profile-manager/avatar');
     assert.ok(srcs.includes(HOSTILE_AVATAR), 'avatar hostil so dentro do <img>');
     assert.ok(srcs.includes(DEFAULT_AVATAR_SVG), 'perfil sem avatar: o padrao, em <img>');
+});
+
+test('escolha de perfil (/prfchs): opcao de remover em cada perfil so com mais de um; id escapado no atributo', async () => {
+    let html = await page('/prfchs');
+    assertNoInjection(html, 'perfis com remocao');
+    const removes = [...html.matchAll(/<div id="remove(\d+)" class="remove" [^>]*select="confirmRemoval" selectParam="([^"]*)">Remove<\/div>/g)];
+    assert.deepEqual(removes.map(m => m[2]), users.map(u => escapeHtml(u.id)));
+    assert.deepEqual(removes.map(m => m[1]), users.map((_, i) => String(i)));
+    assert.ok(html.includes('movedown="remove0"'), 'do perfil desce para a opcao');
+    const resto = users.splice(1);
+    try {
+        html = await page('/prfchs');
+        assert.ok(!html.includes('class="remove"'), 'perfil unico: sem a opcao de remover');
+        assert.ok(!html.includes('movedown="remove'));
+    } finally { users.push(...resto); }
+});
+
+// duble do jQuery so com o que a confirmacao usa
+function fakeJquery(state, nickname) {
+    return sel => ({
+        attr: name => (name === 'id' && sel === '.focused' ? state.focused : undefined),
+        closest: () => ({ children: () => ({ first: () => ({ text: () => nickname }) }) }),
+        text(v) { state.texts[sel] = v; return this; },
+        css(k, v) { state.css[sel] = v; return this; },
+        removeClass() { return this; },
+        addClass() { if (sel.startsWith('#')) state.focused = sel.slice(1); return this; },
+    });
+}
+
+test('confirmacao de remocao: nickname e erro entram por texto; um POST com o id inteiro; Cancelar devolve o foco', async () => {
+    const html = await page('/prfchs');
+    const state = { focused: 'remove1', texts: {}, css: {} };
+    const calls = [];
+    const ctx = vm.createContext({
+        $: fakeJquery(state, users[1].name),
+        fetch: (u, o) => { calls.push([u, o]); return Promise.resolve({ ok: false, status: 400, json: async () => ({ error: '<b>recusada</b>' }) }); },
+        document: { addEventListener() {} }, navigate() {},
+    });
+    for (const [, src] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) vm.runInContext(src, ctx);
+
+    const id = 'urn:a&id=b"<x>#';
+    vm.runInContext(`confirmRemoval(${JSON.stringify(id)})`, ctx);
+    assert.equal(state.texts['#confirm-name'], users[1].name, 'nickname por .text(), nao por HTML');
+    assert.equal(state.css['#confirm'], 'flex');
+    assert.equal(state.focused, 'confirm-cancel', 'o foco comeca em Cancelar');
+
+    vm.runInContext('removeProfile(); removeProfile();', ctx);
+    assert.equal(calls.length, 1, 'um POST por confirmacao');
+    assert.equal(calls[0][0], '/profile/remove');
+    assert.equal(calls[0][1].method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0][1].body), { id });
+    await new Promise(r => setImmediate(r));
+    assert.equal(state.texts['#confirm-error'], '<b>recusada</b>', 'mensagem da recusa por .text()');
+
+    vm.runInContext('closeRemoval()', ctx);
+    assert.equal(state.css['#confirm'], 'none');
+    assert.equal(state.focused, 'remove1', 'o foco volta a opcao de remover');
 });
 
 // avatarHtml embute o arquivo nomeado no campo em <img src=data:>, com o tipo

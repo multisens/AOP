@@ -1,4 +1,4 @@
-// Criacao de perfil: view e backend da propria plataforma (../service.js).
+// Criacao e remocao de perfil: views e backend da propria plataforma (../service.js).
 const ejs = require('ejs');
 const express = require('express');
 const path = require('path');
@@ -30,6 +30,23 @@ router.post('/create', async (req, res) => {
     }
     await core.refreshUserData();
     res.status(201).json(result);
+});
+
+// Remocao pelo telespectador, a partir da tela de escolha de perfil (nao ha
+// API do Anexo C para ela); mesmo contrato de erro da criacao
+router.post('/remove', async (req, res) => {
+    const id = String((req.body && req.body.id) || '');
+    try {
+        await service.removeProfile(id);
+    } catch (err) {
+        if (err instanceof service.ValidationError) {
+            res.status(400).json({ error: err.message });
+            return;
+        }
+        throw err;
+    }
+    core.profileRemoved(id);
+    res.status(200).json({ id });
 });
 
 module.exports = router;

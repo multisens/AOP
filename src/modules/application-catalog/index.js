@@ -5,10 +5,11 @@ const path = require('path');
 const router = express.Router();
 const service = require('./service');
 
+// falha do Redis -> 404 {error:200}
 router.get('/', async (req, res) => {
     const html = await ejs.renderFile(path.join(__dirname, 'view.ejs'),
         {
-            cards: service.cards(),
+            cards: await service.cards(),
             profile: service.profile(),
             basepath: core.GUI.app_catalogue
         });

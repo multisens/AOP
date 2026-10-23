@@ -9,15 +9,21 @@ const { escapeHtml } = require('../../../html');
 function cards() {
 	var usr = core.getUserList();
 	var num = usr.length;
+	// o unico perfil registrado nao pode ser removido: sem a opcao
+	var removable = num > 1;
 
 	var html = '';
 	for(i = 0; i < num; i++) {
 		let left = `card${i-1 >= 0 ? i-1 : "new"}`;
 		let right = `card${i+1 < num ? i+1 : "new"}`;
+		let down = removable ? ` movedown="remove${i}"` : '';
 
-		html += `<div id="card${i}" class="card" moveleft="${left}" moveright="${right}" select="selectProfile" selectParam="${escapeHtml(usr[i].id)}">` +
+		html += `<div id="card${i}" class="card" moveleft="${left}" moveright="${right}"${down} select="selectProfile" selectParam="${escapeHtml(usr[i].id)}">` +
                     avatarHtml(usr[i].avatar) +
                     `<span>${escapeHtml(usr[i].name)}</span>` +
+                    (removable
+                        ? `<div id="remove${i}" class="remove" moveup="card${i}" moveleft="remove${(i + num - 1) % num}" moveright="remove${(i + 1) % num}" select="confirmRemoval" selectParam="${escapeHtml(usr[i].id)}">Remove</div>`
+                        : '') +
                 '</div>';
 	}
 
