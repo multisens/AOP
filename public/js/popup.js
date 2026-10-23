@@ -11,7 +11,7 @@ const popup_types = ['yesno', 'qrcode', 'pin', 'info'];
 const closable_popup_types = ['qrcode', 'pin'];
 
 // Aviso (popup/info, {"value", "timeout"}) que o tv3ws publica ao gravar
-// atributos de emissora do perfil (C.6.14.5, Tabela C.72): sem resposta, fecha
+// atributos de emissora do perfil (C.6.14.5, Tabela C.74): sem resposta, fecha
 // no prazo e nao tira outro pop-up da tela; espera numa fila curta (cheia:
 // descartado). So o aviso tem fila; aviso substituido volta ao comeco dela.
 const INFO_QUEUE_MAX = 3;
