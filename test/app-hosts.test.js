@@ -1,8 +1,9 @@
-// Testes de src/app-hosts.js e do registro da origem em src/core.js (MQTT e
-// Redis dubles): rotulo, origem, Host, origins:associated, proxy por Host e
-// redirecionamento de /graphicsAppProxy. O "bcast" e um servidor HTTP local.
-// Tambem o perfil corrente no core (perfil padrao na subida e remocao de
-// perfil) e a LLS entregue a unidade dona da lista de servicos.
+// Tests of src/app-hosts.js and of the origin registration in src/core.js
+// (MQTT and Redis doubles): label, origin, Host, origins:associated, proxy by
+// Host and redirection of /graphicsAppProxy. The "bcast" is a local HTTP
+// server. Also the current profile in the core (default profile at startup
+// and profile removal) and the LLS delivered to the unit that owns the list
+// of services.
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
@@ -11,30 +12,32 @@ const Module = require('module');
 const { EventEmitter } = require('events');
 const express = require('express');
 
-// configuracao fixa: o core a le uma vez, ao carregar
+// Fixed configuration: the core reads it once, when loaded.
 process.env.APPS_DOMAIN = 'apps.localhost';
 process.env.AOP_PUBLIC_PORT = '8080';
 
 const appHosts = require('../src/app-hosts');
 
-// --- dubles ---------------------------------------------------------------------
+// --- doubles -----------------------------------------------------------------
 const FAIL = 'redis indisponivel (duble de teste)';
 const store = new Map();
 let down = false;
 const hashOf = k => (store.get(k) instanceof Map ? store.get(k) : new Map());
-const writes = [];   // ['FCALL', funcao, ...args] de cada escrita
+// ['FCALL', function, ...args] of each write.
+const writes = [];
 const fakeRedis = {
     status: 'ready',
     once() {},
     on() {},
 };
-// O duble imita o EFEITO das funcoes de origem e de perfil (call('FCALL',
-// funcao, 0, ...)), sem conferir o esquema (testado no Redis real,
-// infra/redis/test); o lastAccess de perfil desconhecido da 0.
+// The double mimics the EFFECT of the origin and profile functions
+// (call('FCALL', function, 0, ...)), without checking the schema; the
+// lastAccess of an unknown profile gives 0.
 const ORIGENS = 'origins:associated';
 const INDICE = 'users:index';
 const indice = () => (store.get(INDICE) instanceof Set ? store.get(INDICE) : new Set());
-let recusa = null;   // [funcao, mensagem]: a funcao responde como a dado fora do esquema
+// [function, message]: the function answers as for data outside the schema.
+let recusa = null;
 for (const [name, fn] of Object.entries({
     async call(cmd, nome, numkeys, ...args) {
         if (cmd !== 'FCALL' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${numkeys}: nao suportado pelo duble`);
@@ -55,7 +58,8 @@ for (const [name, fn] of Object.entries({
                 return 1;
             }
             case 'tv30_perfil_ultimo_acesso': return indice().has(a[0]) ? 1 : 0;
-            // a lista dos servicos anunciados, gravada na partida do core
+            // The list of announced services, written at the startup of the
+            // core.
             case 'tv30_servicos_anunciados': store.set('services:announced', new Set(a)); return new Set(a).size;
             default: throw new Error('ERR Function not found');
         }
@@ -67,7 +71,8 @@ for (const [name, fn] of Object.entries({
 }
 const origins = () => Object.fromEntries(hashOf('origins:associated'));
 
-const published = [];   // [topico, mensagem, retido]
+// [topic, message, retained]
+const published = [];
 const fakeMqtt = new EventEmitter();
 fakeMqtt.publish = (t, m, o) => { published.push([t, String(m), !!(o && o.retain)]); };
 fakeMqtt.subscribe = () => undefined;
@@ -90,17 +95,19 @@ stubFile(require.resolve('mqtt'), { connect: () => fakeMqtt });
 const quiet = { log() {}, error() {} };
 const realLog = console.log;
 const realError = console.error;
-console.log = () => undefined;     // o core loga conexao, perfis e proxy
+// The core logs connection, profiles and proxy.
+console.log = () => undefined;
 console.error = () => undefined;
 after(() => { console.log = realLog; console.error = realError; });
 
-// origem orfa de uma execucao anterior: a limpeza do boot do core a apaga
+// An orphan origin of a previous run: the boot cleanup of the core deletes
+// it.
 store.set('origins:associated', new Map([['http://orfa.apps.localhost:8080', 'svc-velho']]));
 const core = require('../src/core');
 const bootstrap = require('../src/modules/bootstrap-application/service');
 fakeMqtt.emit('connect');
 
-// --- utilitarios ----------------------------------------------------------------
+// --- utilities ---------------------------------------------------------------
 function listen(handler) {
     return new Promise(r => { const s = http.createServer(handler).listen(0, '127.0.0.1', () => r(s)); });
 }
@@ -121,7 +128,7 @@ function request(port, { host, method = 'GET', path: p = '/', body, headers = {}
         req.end();
     });
 }
-// "bcast": devolve o que recebeu
+// "bcast": returns what it received.
 function fakeBcast() {
     return listen((req, res) => {
         let body = '';
@@ -132,7 +139,7 @@ function fakeBcast() {
         });
     });
 }
-// AoP montado na mesma ordem do server.js
+// AoP mounted in the same order as server.js.
 async function withAop(fn) {
     const app = express();
     app.use(appHosts.appHostProxy({ cfg: appHosts.appsConfig(), lookup: core.getGraphicsAppByLabel, log: quiet }));
@@ -145,7 +152,7 @@ async function withAop(fn) {
     finally { await close(server); }
 }
 
-// --- rotulo, origem, Host -------------------------------------------------------
+// --- label, origin, Host -----------------------------------------------------
 test('appsConfig: padrao apps.localhost e porta PORT ou 8080; valor invalido lanca erro', () => {
     assert.deepEqual({ ...appHosts.appsConfig({}) }, { domain: 'apps.localhost', port: 8080 });
     assert.deepEqual({ ...appHosts.appsConfig({ PORT: '8099' }) }, { domain: 'apps.localhost', port: 8099 });
@@ -202,13 +209,13 @@ test('hostLabel: so o que esta no dominio das aplicacoes; porta e caixa nao impo
     }
 });
 
-// --- registro da origem (core) --------------------------------------------------
+// --- origin registration (core) ----------------------------------------------
 test('boot: a limpeza de origins:associated apaga a origem orfa', async () => {
     await new Promise(r => setImmediate(r));
     assert.deepEqual(origins(), {});
 });
 
-// --- perfil corrente (core) -----------------------------------------------------
+// --- current profile (core) --------------------------------------------------
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 async function ate(cond) {
     for (let i = 0; i < 200 && !cond(); i++) await new Promise(r => setTimeout(r, 5));
@@ -244,7 +251,8 @@ test('remocao do perfil corrente: aop/currentUser vazio (retido), aop/removedUse
     await core.refreshUserData();
     assert.equal(core.getUserList().length, 3);
 
-    // o armazenamento ja nao tem o perfil (tv30_perfil_remove) quando o core e avisado
+    // Storage no longer has the profile (tv30_perfil_remove) when the core is
+    // told.
     tiraDoDuble(atual);
     let n0 = published.length;
     core.profileRemoved(atual);
@@ -256,7 +264,7 @@ test('remocao do perfil corrente: aop/currentUser vazio (retido), aop/removedUse
     assert.equal(core.getCurrentUser(), '');
     assert.deepEqual(core.getUserList().map(u => u.id).sort(), [B, C].sort());
 
-    // o seletor recarrega os perfis sem escolher um por conta propria
+    // The chooser reloads the profiles without choosing one by itself.
     n0 = published.length;
     await core.refreshUserData();
     assert.equal(core.getCurrentUser(), '');
@@ -265,7 +273,7 @@ test('remocao do perfil corrente: aop/currentUser vazio (retido), aop/removedUse
     await core.setCurrentUser(B);
     assert.deepEqual(published.at(-1), ['aop/currentUser', B, true]);
 
-    // perfil que nao e o corrente: aop/currentUser fica
+    // A profile that is not the current one: aop/currentUser stays.
     tiraDoDuble(C);
     n0 = published.length;
     core.profileRemoved(C);
@@ -295,7 +303,8 @@ test('lancamento pela BALD: registra a origem PROPRIA da aplicacao (nao o alvo d
     assert.equal(lastGraphics(), `${origin}/graphicsAppProxy/users-test`);
     assert.equal(core.getGraphicsAppByLabel('urn-tv30-app-k1a2b3').target, 'http://bcast:8081');
     assert.equal(core.getGraphicsAppByLabel('outra'), null);
-    assert.equal(core.getGraphicsApp().origin, origin);   // destino do redirecionamento de /graphicsAppProxy
+    // Target of the redirection of /graphicsAppProxy.
+    assert.equal(core.getGraphicsApp().origin, origin);
 });
 
 test('troca de aplicacao: remove a origem anterior e registra a nova; relancar a mesma nao a remove', async () => {
@@ -354,11 +363,12 @@ test('Redis fora do ar: o lancamento rejeita (rota HTTP responde 404 {error:200}
     try {
         await assert.rejects(core.setDisplayGraphics('http://bcast:8081', '/x', 'urn:tv30:app:r'), { message: FAIL });
     } finally { down = false; }
-    await core.setDisplayGraphics();   // limpa o estado (a origem nao chegou a ser gravada)
+    // Clears the state (the origin was never written).
+    await core.setDisplayGraphics();
     assert.deepEqual(origins(), {});
 });
 
-// --- roteamento por Host --------------------------------------------------------
+// --- routing by Host ---------------------------------------------------------
 test('host da aplicacao vai ao proxy dela, com corpo intacto; outros hosts seguem para o AoP', async () => {
     const bcast = await fakeBcast();
     const target = `http://127.0.0.1:${bcast.address().port}`;
@@ -371,17 +381,20 @@ test('host da aplicacao vai ao proxy dela, com corpo intacto; outros hosts segue
             let j = JSON.parse(r.body);
             assert.equal(j.bcast, true);
             assert.equal(j.url, '/users-test?x=1');
-            assert.equal(j.host, `127.0.0.1:${bcast.address().port}`);   // changeOrigin
+            // changeOrigin
+            assert.equal(j.host, `127.0.0.1:${bcast.address().port}`);
 
-            r = await request(port, { host, path: '/' });   // a raiz e da aplicacao, nao a pagina do AoP
+            // The root belongs to the application, not to the AoP page.
+            r = await request(port, { host, path: '/' });
             assert.equal(JSON.parse(r.body).url, '/');
 
-            // prefixo /graphicsAppProxy: opcional no host da aplicacao; com ele,
-            // sai do caminho que vai ao alvo
+            // /graphicsAppProxy prefix: optional on the application host; with
+            // it, it is removed from the path that goes to the target.
             r = await request(port, { host, path: '/graphicsAppProxy/users-test?x=1' });
             assert.equal(r.status, 200);
             assert.equal(JSON.parse(r.body).url, '/users-test?x=1');
-            r = await request(port, { host, path: '/js/navigation.js' });   // pedido a partir da raiz: arquivo da aplicacao
+            // A request from the root: a file of the application.
+            r = await request(port, { host, path: '/js/navigation.js' });
             assert.equal(JSON.parse(r.body).url, '/js/navigation.js');
 
             r = await request(port, { host, method: 'POST', path: '/eco', body: '{"a":1}' });
@@ -402,7 +415,8 @@ test('host da aplicacao vai ao proxy dela, com corpo intacto; outros hosts segue
             r = await request(port, { host: 'localhost:8080', method: 'POST', path: '/eco', body: '{"a":1}' });
             assert.deepEqual(JSON.parse(r.body), { aop: true, body: { a: 1 } });
 
-            await core.setDisplayGraphics();   // encerra
+            // Ends it.
+            await core.setDisplayGraphics();
             r = await request(port, { host, path: '/users-test' });
             assert.equal(r.status, 404);
         });
@@ -436,7 +450,8 @@ test('/graphicsAppProxy no host do AoP: 302 para o host da aplicacao, sem gravar
 test('aplicacao fora do ar: host dela responde 502; sem aplicacao, /graphicsAppProxy no host do AoP responde 404', async () => {
     const bcast = await fakeBcast();
     const port0 = bcast.address().port;
-    await close(bcast);   // porta fechada
+    // Closed port.
+    await close(bcast);
     try {
         await core.setDisplayGraphics(`http://127.0.0.1:${port0}`, '/users-test', 'urn:tv30:app:d1');
         await withAop(async port => {
@@ -444,7 +459,8 @@ test('aplicacao fora do ar: host dela responde 502; sem aplicacao, /graphicsAppP
             assert.equal(r.status, 502);
             r = await request(port, { host: 'urn-tv30-app-d1.apps.localhost:8080', path: '/graphicsAppProxy/users-test' });
             assert.equal(r.status, 502);
-            await core.setDisplayGraphics();   // encerra
+            // Ends it.
+            await core.setDisplayGraphics();
             r = await request(port, { host: 'localhost:8080', path: '/graphicsAppProxy/users-test' });
             assert.equal(r.status, 404);
             assert.match(r.body, /nenhuma aplicacao em execucao/);
@@ -454,7 +470,7 @@ test('aplicacao fora do ar: host dela responde 502; sem aplicacao, /graphicsAppP
 
 test('LLS no core: a BAMT vai a unidade dona, que grava services:announced e publica aop/services retido; o servico corrente sai dela', async () => {
     const servicos = () => published.filter(([t]) => t === 'aop/services');
-    // na partida, antes de qualquer BAMT: a lista vazia
+    // At startup, before any BAMT: the empty list.
     assert.deepEqual(servicos()[0], ['aop/services', '[]', true]);
     const BAM = { globalServiceId: SID, appVersion: 1, appName: 'Users', appIcon: '<svg/>', bannerIcon: '<svg/>', backgroundColor: '#000000', foregroundColor: '#ffffff' };
     fakeMqtt.emit('message', 'tlm/lls/bs-teste/bamt', Buffer.from(JSON.stringify([BAM])));
@@ -463,7 +479,7 @@ test('LLS no core: a BAMT vai a unidade dona, que grava services:announced e pub
     assert.deepEqual([...store.get('services:announced')], [SID]);
     core.setCurrentService(SID);
     assert.equal(core.getCurrentService().bam.appName, 'Users');
-    // BAMT retirada (mensagem vazia retida)
+    // BAMT removed (empty retained message).
     fakeMqtt.emit('message', 'tlm/lls/bs-teste/bamt', Buffer.from(''));
     await ate(() => servicos().at(-1)[1] === '[]');
     assert.equal(store.get('services:announced').size, 0);

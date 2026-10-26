@@ -521,7 +521,7 @@
             </div>
 
             <div class="avatar-grid" id="avatar-grid">
-                <!-- Avatares carregados dinamicamente -->
+                <!-- Avatars loaded dynamically -->
             </div>
 
             <div class="modal-actions">
@@ -566,7 +566,7 @@
             }
         }
 
-        // Paleta e avatar padrao: ../avatar.js
+        // Palette and default avatar: ../avatar.js.
         const AVATAR_COLORS = <%- JSON.stringify(avatarColors) %>;
         const DEFAULT_AVATAR_SVG = <%- JSON.stringify(defaultAvatar) %>;
 
@@ -635,16 +635,17 @@
             const dialogEnhancement  = document.getElementById('dialogue-enhancement').parentElement.classList.contains('selected');
             const voiceGuidance      = document.getElementById('voice-guidance').parentElement.classList.contains('selected');
 
-            // closedCaptioningLanguage: aplicavel somente se closedCaptioning = true
+            // closedCaptioningLanguage: applicable only if closedCaptioning =
+            // true.
             const closedCaptioningLanguage = closedCaptioning
                 ? document.getElementById('closedCaptioningLanguage').value
                 : undefined;
 
-            // Janela de libras: aplicavel somente se closedSigning = true
+            // Sign language window: applicable only if closedSigning = true.
             const closedSigningSide  = closedSigning ? document.getElementById('closedSigningSide').value  : undefined;
             const closedSigningWidth = closedSigning ? parseInt(document.getElementById('closedSigningWidth').value) : undefined;
 
-            // maxContentRating: requerido somente se parentalControl = true
+            // maxContentRating: required only if parentalControl = true.
             const maxContentRating = parentalControl ? document.getElementById('maxContentRating').value : undefined;
 
             if (!name || !document.getElementById('terms').checked) {
@@ -660,7 +661,7 @@
                 return;
             }
 
-            // Payload com atributos basicos da ABNT NBR 25608 (Tabela 7)
+            // Payload with the basic attributes of Table 7.
             const newProfile = {
                 nickname: name,
                 avatar: selectedAvatar,
@@ -678,7 +679,8 @@
                 voiceGuidance
             };
 
-            // a criacao de perfil e da plataforma (POST na propria origem)
+            // Profile creation belongs to the platform (POST on its own
+            // origin).
             fetch('/profile/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -687,8 +689,8 @@
             .then(async (response) => {
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    // 400 traz {error: mensagem}; falha da plataforma traz
-                    // {error: 200, description} (formato C.3.2)
+                    // 400 carries {error: message}; a platform failure carries
+                    // {error: 200, description} (C.3.2 format).
                     const msg = typeof data.error === 'string' ? data.error : data.description;
                     throw new Error(msg || ('HTTP ' + response.status));
                 }
@@ -745,8 +747,8 @@
             push(document.getElementById('parental-control'));
             document.querySelectorAll('.ratings img').forEach(push);
 
-            // accessibility-items na ordem do DOM, com signing-config entrando
-            // logo depois de "sign-language" quando libras esta ativo
+            // accessibility-items in DOM order, with signing-config coming
+            // right after "sign-language" when sign language is on.
             document.querySelectorAll('.accessibility-item').forEach(item => {
                 push(item);
                 const img = item.querySelector('img');
@@ -863,7 +865,8 @@
                     e.preventDefault();
                     focusStop(currentStopIdx + 1);
                 }
-                return; // Left/Right segue comportamento nativo do range
+                // Left/Right keep the native behavior of the range.
+                return;
             }
 
             if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {

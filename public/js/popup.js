@@ -1,29 +1,31 @@
 let has_popup = false;
 let yesno_popup = false;
-// Tipo do pop-up na tela e o prazo dele, um so, cancelado quando o pop-up fecha
-// ou e substituido: QR code e PIN ficam no maximo 120 s (tv3ws,
-// PAIRING_POPUP_TIMEOUT_MS), e o prazo de um que ja saiu fecharia o seguinte.
+// Type of the pop-up on screen and its deadline, a single one, canceled when
+// the pop-up closes or is replaced: the deadline of one that already left
+// would close the next one.
 let popup_type = null;
 let popup_timer = null;
 
 const popup_types = ['yesno', 'qrcode', 'pin', 'info'];
-// Pop-ups que o tv3ws fecha no fim do pareamento (C.4.3.2, C.4.3.3)
+// Pop-ups closed by a close message at the end of the pairing (C.4.3.2,
+// C.4.3.3).
 const closable_popup_types = ['qrcode', 'pin'];
 
-// Aviso (popup/info, {"value", "timeout"}) que o tv3ws publica ao gravar
-// atributos de emissora do perfil (C.6.14.5, Tabela C.74): sem resposta, fecha
-// no prazo e nao tira outro pop-up da tela; espera numa fila curta (cheia:
-// descartado). So o aviso tem fila; aviso substituido volta ao comeco dela.
+// Notice (popup/info, {"value", "timeout"}) of a write of broadcaster
+// attributes of the profile (C.6.14.5, Table C.74): without an answer, it
+// closes at its deadline and does not take another pop-up off the screen; it
+// waits in a short queue (full: discarded). Only the notice has a queue; a
+// replaced notice goes back to its start.
 const INFO_QUEUE_MAX = 3;
 const INFO_DEFAULT_TIMEOUT = 5000;
 const info_queue = [];
-// texto do aviso na tela (para voltar a fila se for substituido)
+// Text of the notice on screen (to go back to the queue if replaced).
 let info_on_screen = null;
 
-// Mensagem de aop/display/layers/popup/<tipo>[/message], repassada por
-// mqtt_message (view.ejs). {"close":true} no QR code ou no PIN e o fim do
-// pareamento (C.4.3.2, C.4.3.3): fecha o pop-up aberto daquele tipo, e so ele.
-// Mensagem invalida vai para o console e e ignorada.
+// Message of aop/display/layers/popup/<type>[/message], passed on by
+// mqtt_message (view.ejs). {"close":true} on the QR code or the PIN is the
+// end of the pairing (C.4.3.2, C.4.3.3): closes the open pop-up of that type,
+// and only it. An invalid message goes to the console and is ignored.
 function handlePopupMessage(type, raw) {
     let content;
     try {
@@ -72,18 +74,18 @@ function showNextInfo() {
     presentPopup('info', next.text, next.timeout);
 }
 
-// Texto da mensagem MQTT so entra escapado no HTML do pop-up: o display-name do
-// /tv3/authorize, escolhido pelo cliente, poderia rodar script que chamasse o
-// PopupYes e autorizasse o cliente sem o espectador. O QR code nao passa por
-// aqui: a biblioteca o desenha a partir do texto.
+// The text of the MQTT message enters the HTML of the pop-up only escaped:
+// the display-name of /tv3/authorize, chosen by the client, could run a
+// script that called PopupYes and authorized the client without the viewer.
+// The QR code does not pass here: the library draws it from the text.
 function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
 function presentPopup(type, content, timeout) {
     console.log(`Pediu popup ${type}, com ${content}, por ${timeout}`);
-    // pop-up novo substitui o da tela (o aviso so chega aqui com a camada
-    // livre); aviso substituido volta ao comeco da fila
+    // A new pop-up replaces the one on screen (the notice only gets here with
+    // the layer free); a replaced notice goes back to the start of the queue.
     if (has_popup) {
         if (popup_type == 'info' && info_on_screen) {
             info_queue.unshift(info_on_screen);
@@ -139,16 +141,16 @@ function presentPopup(type, content, timeout) {
             $('#popup').height('40%');
         }
         else if (type == 'info') {
-            // so o texto, escapado; sem botoes (as teclas seguem para a
-            // pagina: yesno_popup fica falso)
+            // Only the text, escaped; no buttons (the keys go on to the page:
+            // yesno_popup stays false).
             info_on_screen = { text: content, timeout };
             $('#popup').html(`<span class="text">${escapeHtml(content)}</span>`);
             $('#popup').height('20%');
         }
 
-        // trava de seguranca: o tv3ws manda fechar no fim do pareamento
-        // (handlePopupMessage); se o cliente desistir, o prazo fecha. O aviso
-        // (info) fecha so por aqui.
+        // Safety lock: a close message ends the pairing (handlePopupMessage);
+        // if the client gives up, the deadline closes it. The notice (info)
+        // closes only here.
         popup_timer = setTimeout(() => {
             if (has_popup) {
                 ClosePopup();
@@ -163,15 +165,15 @@ function ClosePopup() {
     showNextInfo();
 }
 
-// Tira o pop-up da tela sem olhar a fila (substituicao, presentPopup)
+// Takes the pop-up off the screen without looking at the queue
+// (replacement, presentPopup).
 function hidePopup() {
     clearTimeout(popup_timer);
     popup_timer = null;
     has_popup = false;
     popup_type = null;
     info_on_screen = null;
-    // as teclas voltam para a pagina (relay_key, view.ejs) qualquer que seja o
-    // pop-up que saiu
+    // The keys go back to the page (relay_key, view.ejs) whatever pop-up left.
     yesno_popup = false;
     $('#popup').hide();
     $('#popup').html('');
