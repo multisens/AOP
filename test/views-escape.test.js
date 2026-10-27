@@ -36,7 +36,7 @@ fs.writeFileSync(path.join(THUMBS, 'hostil.svg'), HOSTILE_AVATAR);
 const users = [
     { id: '0b6f3e2a-7c1d-4e5f-9a8b-2c3d4e5f6a7b', name: 'Maria', avatar: null },
     { id: '9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d', name: '<svg/onload=alert()>', avatar: 'hostil.svg' },
-    // The Redis schema requires a UUID in the id (infra/redis/esquema.json);
+    // The Redis schema requires a UUID in the id (infra/redis/schema.json);
     // escaping in the attribute is an extra defense.
     { id: `x" onfocus="${INJ('id')}`, name: 'Id hostil', avatar: null },
 ];

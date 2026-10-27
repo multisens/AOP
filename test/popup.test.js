@@ -56,7 +56,7 @@ function page() {
     };
     const $ = sel => {
         if (sel === '#popup') return popupEl;
-        throw new Error(`seletor nao previsto no duble: ${sel}`);
+        throw new Error(`seletor not in the schema no duble: ${sel}`);
     };
     const qrcodes = [];
     function QRCode(target, opts) { qrcodes.push({ target, text: opts.text }); }

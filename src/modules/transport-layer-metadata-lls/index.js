@@ -3,7 +3,7 @@
 // in Redis and the retained topic aop/services), one per BAM, by the
 // globalServiceId.
 const redis = require('../../redis-client');
-const funcoes = require('../../redis-funcoes');
+const redisFunctions = require('../../redis-functions');
 
 const TOPIC = 'tlm/lls/#';
 const SERVICES_TOPIC = 'aop/services';
@@ -42,10 +42,10 @@ function commit() {
 async function write() {
     const ids = announced().map(s => s.serviceContextId);
     try {
-        await funcoes.servicosAnunciados(ids);
+        await redisFunctions.announcedServices(ids);
     } catch (err) {
         failures++;
-        const refused = funcoes.recusaDoEsquema(err);
+        const refused = redisFunctions.isSchemaRefusal(err);
         if (refused || failures === 1) console.error(`[lls] ${SERVICES_KEY} nao gravado (${ids.length} servico(s)): ${err.message}`);
         if (!refused) retry();
         return;

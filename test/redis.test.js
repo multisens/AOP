@@ -44,7 +44,7 @@ const fcalls = [];
 // [function, message]
 let recusa = null;
 const TETO = 5;
-const recusaDoTeto = id => `TV30ESQUEMA tv30_perfil_grava: users:index teto de ${TETO} perfis atingido (10.3.3): "${id}" nao gravado`;
+const recusaDoTeto = id => `TV30SCHEMA tv30_profile_write: users:index limit of ${TETO} profiles reached (10.3.3): "${id}" not written`;
 const fakeRedis = new Proxy({
     async call(cmd, nome, numkeys, ...args) {
         if (cmd !== 'FCALL' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${numkeys}: nao suportado pelo duble`);
@@ -52,13 +52,13 @@ const fakeRedis = new Proxy({
         fcalls.push([nome, ...a]);
         if (recusa && recusa[0] === nome) throw new Error(recusa[1]);
         switch (nome) {
-            case 'tv30_perfil_ultimo_acesso': {
+            case 'tv30_profile_last_access': {
                 const [id, ms] = a;
                 if (!setOf('users:index').has(id)) return 0;
                 store.set(`user:${id}`, { ...(store.get(`user:${id}`) || {}), lastAccess: ms });
                 return 1;
             }
-            case 'tv30_perfil_grava': {
+            case 'tv30_profile_write': {
                 const [id, n] = a;
                 const k = Number(n);
                 const h = {};
@@ -70,7 +70,7 @@ const fakeRedis = new Proxy({
                 if (k > 0) { const s = setOf(`user:${id}:consent`); a.slice(2, 2 + k).forEach(x => s.add(x)); store.set(`user:${id}:consent`, s); }
                 return 1;
             }
-            case 'tv30_perfil_remove': {
+            case 'tv30_profile_remove': {
                 const [id] = a;
                 let n = setOf('users:index').delete(id) ? 1 : 0;
                 for (const key of [...store.keys()]) {
@@ -246,14 +246,14 @@ test('POST /profile/create: dado invalido 400; Redis fora 404 {error:200}; ok 20
 });
 
 // --- profile writes by the Redis functions -----------------------------------
-test('createProfile: UMA chamada tv30_perfil_grava com a visibilidade do servico ativo e a Tabela 7 em texto', async () => {
+test('createProfile: UMA chamada tv30_profile_write com a visibilidade do servico ativo e a Tabela 7 em texto', async () => {
     store.clear();
     fcalls.length = 0;
     store.set('session:current-service-id', 'urn:tv30:service:users-test');
     const { user } = await profiles.createProfile({ nickname: ' Novo ', closedSigning: true, accessConsent: ['urn:a'] });
     assert.equal(fcalls.length, 1);
     const [nome, id, n, ...resto] = fcalls[0];
-    assert.equal(nome, 'tv30_perfil_grava');
+    assert.equal(nome, 'tv30_profile_write');
     assert.equal(id, user.id);
     assert.equal(n, '2');
     assert.deepEqual(resto.slice(0, 2), ['urn:a', 'urn:tv30:service:users-test']);
@@ -287,18 +287,18 @@ test('limite de cinco: a recusa da funcao que grava vira ValidationError com a m
     store.set('users:index', idx);
     await assert.rejects(profiles.createProfile({ nickname: 'Sexto' }),
         err => err instanceof profiles.ValidationError && err.message === 'O limite de 5 perfis foi atingido. O perfil não foi criado.');
-    assert.deepEqual(fcalls.map(c => c[0]), ['tv30_perfil_grava'], 'sem leitura previa: a conferencia e da funcao');
+    assert.deepEqual(fcalls.map(c => c[0]), ['tv30_profile_write'], 'sem leitura previa: a conferencia e da funcao');
     assert.equal(setOf('users:index').size, 5);
     assert.equal(store.has(`user:${perfil(3)}:broadcaster-attrs:urn:s`), true);
 
     // The limit of the message is the one of the refusal; another refusal of
     // the function is still a defect.
-    recusa = ['tv30_perfil_grava', 'TV30ESQUEMA tv30_perfil_grava: users:index teto de 3 perfis atingido (10.3.3): "x" nao gravado'];
+    recusa = ['tv30_profile_write', 'TV30SCHEMA tv30_profile_write: users:index limit of 3 profiles reached (10.3.3): "x" not written'];
     try {
         await assert.rejects(profiles.createProfile({ nickname: 'Outro' }),
             err => err instanceof profiles.ValidationError && err.message === 'O limite de 3 perfis foi atingido. O perfil não foi criado.');
-        recusa = ['tv30_perfil_grava', 'TV30ESQUEMA tv30_perfil_grava: users:index no Redis e string, o esquema pede set (nada gravado)'];
-        await assert.rejects(profiles.createProfile({ nickname: 'Outro' }), err => !(err instanceof profiles.ValidationError) && /no Redis e string/.test(err.message));
+        recusa = ['tv30_profile_write', 'TV30SCHEMA tv30_profile_write: users:index in Redis is string, the schema asks for set (nada gravado)'];
+        await assert.rejects(profiles.createProfile({ nickname: 'Outro' }), err => !(err instanceof profiles.ValidationError) && /in Redis is string/.test(err.message));
     } finally { recusa = null; }
 
     // With four, the fifth is created.
@@ -331,8 +331,8 @@ test('POST /profile/create: idioma ou visibilidade fora do esquema 400 (antes de
         let r = await post({ nickname: 'X', closedCaptioning: false, closedCaptioningLanguage: 'qualquer coisa' });
         assert.equal(r.status, 201);
 
-        const msg = `TV30ESQUEMA tv30_perfil_grava: user:${UM} campo nickname: tem 21 caracteres, maximo 20`;
-        recusa = ['tv30_perfil_grava', msg];
+        const msg = `TV30SCHEMA tv30_profile_write: user:${UM} field nickname: has 21 characters, maximum 20`;
+        recusa = ['tv30_profile_write', msg];
         try {
             r = await post({ nickname: 'Novo' });
             assert.equal(r.status, 404);
@@ -351,7 +351,7 @@ const { AVATAR_COLORS, DEFAULT_AVATAR_SVG } = require('../src/modules/profile-ma
 const AVATAR_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(svg|png|jpg|jpeg|webp)$/;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // Fields of the hash in the call
-// tv30_perfil_grava <id> <n> <consent x n> <field value ...>
+// tv30_profile_write <id> <n> <consent x n> <field value ...>
 const hashOfCall = call => {
     const [, , n, ...resto] = call;
     const h = {};
@@ -408,11 +408,11 @@ test('perfil recusado pela funcao apaga o arquivo; falha ao gravar o arquivo nao
     store.clear();
     fs.rmSync(THUMBS, { recursive: true, force: true });
     fcalls.length = 0;
-    recusa = ['tv30_perfil_grava', `TV30ESQUEMA tv30_perfil_grava: user:${UM} campo avatar: fora do formato`];
+    recusa = ['tv30_profile_write', `TV30SCHEMA tv30_profile_write: user:${UM} field avatar: outside the format`];
     try {
-        await assert.rejects(profiles.createProfile({ nickname: 'Recusado' }), /TV30ESQUEMA/);
+        await assert.rejects(profiles.createProfile({ nickname: 'Recusado' }), /TV30SCHEMA/);
     } finally { recusa = null; }
-    assert.equal(fcalls.filter(c => c[0] === 'tv30_perfil_grava').length, 1);
+    assert.equal(fcalls.filter(c => c[0] === 'tv30_profile_write').length, 1);
     assert.deepEqual(thumbFiles(), [], 'arquivo apagado depois da recusa');
 
     // An impossible thumbnail directory (a file in its place): nothing in
@@ -422,7 +422,7 @@ test('perfil recusado pela funcao apaga o arquivo; falha ao gravar o arquivo nao
     fcalls.length = 0;
     try {
         await assert.rejects(profiles.createProfile({ nickname: 'SemDir' }));
-        assert.deepEqual(fcalls.filter(c => c[0] === 'tv30_perfil_grava'), [], 'perfil nao gravado sem o arquivo');
+        assert.deepEqual(fcalls.filter(c => c[0] === 'tv30_profile_write'), [], 'perfil nao gravado sem o arquivo');
     } finally { fs.rmSync(THUMBS, { force: true }); }
 });
 
@@ -447,7 +447,7 @@ test('o sexto perfil recusado pela funcao nao deixa arquivo de avatar; POST /pro
         assert.equal((await r.json()).error, 'O limite de 5 perfis foi atingido. O perfil não foi criado.');
     });
     assert.deepEqual(thumbFiles(), antes);
-    assert.deepEqual(fcalls.map(c => c[0]), ['tv30_perfil_grava']);
+    assert.deepEqual(fcalls.map(c => c[0]), ['tv30_profile_write']);
 });
 
 // --- removal by the viewer and default profile -------------------------------
@@ -470,7 +470,7 @@ test('removeProfile: o unico perfil registrado e o perfil inexistente nao sao re
     assert.ok(store.has(`user:${UM}`));
 });
 
-test('removeProfile: perfil, visibilidade e atributos de emissora pela tv30_perfil_remove, depois o arquivo do avatar; arquivo de outro perfil fica', async () => {
+test('removeProfile: perfil, visibilidade e atributos de emissora pela tv30_profile_remove, depois o arquivo do avatar; arquivo de outro perfil fica', async () => {
     store.clear();
     fcalls.length = 0;
     fs.rmSync(THUMBS, { recursive: true, force: true });
@@ -485,7 +485,7 @@ test('removeProfile: perfil, visibilidade e atributos de emissora pela tv30_perf
     for (const f of [`${A}.svg`, 'compartilhado.png']) fs.writeFileSync(path.join(THUMBS, f), 'x');
 
     assert.deepEqual(await profiles.removeProfile(A), { id: A });
-    assert.deepEqual(fcalls, [['tv30_perfil_remove', A]]);
+    assert.deepEqual(fcalls, [['tv30_profile_remove', A]]);
     assert.deepEqual([...store.keys()].filter(k => k.startsWith(`user:${A}`)), []);
     assert.equal(setOf('users:index').has(A), false);
     assert.deepEqual(thumbFiles(), ['compartilhado.png'], 'o arquivo do avatar do removido nao existe mais');
@@ -562,7 +562,7 @@ test('ensureDefaultProfile: base vazia ganha um perfil com os padroes da Tabela 
     assert.equal(p.nickname, 'Viewer 1');
     assert.equal(fcalls.length, 1);
     const [nome, id, n] = fcalls[0];
-    assert.equal(nome, 'tv30_perfil_grava');
+    assert.equal(nome, 'tv30_profile_write');
     assert.equal(id, p.id);
     assert.equal(n, '0', 'sem visibilidade para servico algum');
     const h = hashOfCall(fcalls[0]);

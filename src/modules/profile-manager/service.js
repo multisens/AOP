@@ -4,14 +4,14 @@
 // 404 {error:200}.
 const crypto = require('crypto');
 const redis = require('../../redis-client');
-const funcoes = require('../../redis-funcoes');
+const redisFunctions = require('../../redis-functions');
 const avatarFiles = require('./avatar');
 
 const VALID_RATINGS = ['L', '10', '12', '14', '16', '18'];
 const VALID_SIDES = ['left', 'right'];
 
 // Table 7: languages in IETF RFC 5646. The same format check as the Redis
-// function (idiomaOk in infra/redis/funcoes.lua): subtags of 1 to 8 letters
+// function (languageOk in infra/redis/functions.lua): subtags of 1 to 8 letters
 // or digits separated by '-', the first one letters only (2 to 8) or the
 // singleton x/i. The IANA registry is not checked.
 function isLanguageTag(v) {
@@ -76,7 +76,7 @@ function validateProfile(userData) {
 // is not recreated.
 async function touchLastAccess(id, now = Date.now()) {
     if (!id) return false;
-    return funcoes.perfilUltimoAcesso(String(id), String(now));
+    return redisFunctions.profileLastAccess(String(id), String(now));
 }
 
 // 10.3.3: at most five profiles, checked by the Redis function that writes
@@ -129,11 +129,11 @@ async function createProfile(userData) {
     // failure writing the profile deletes the file and is thrown.
     await avatarFiles.writeAvatarFile(userId, avatarDoc);
     try {
-        await funcoes.perfilGrava(userId, accessConsent, hashFields);
+        await redisFunctions.profileWrite(userId, accessConsent, hashFields);
     } catch (err) {
         await avatarFiles.removeAvatarFile(userId)
             .catch(e => console.error(`[profiles] perfil ${userId} nao gravado; o arquivo do avatar ficou: ${e.message}`));
-        const teto = funcoes.tetoDePerfis(err);
+        const teto = redisFunctions.profileLimitOf(err);
         if (teto !== null) throw new ValidationError(`O limite de ${teto} perfis foi atingido. O perfil não foi criado.`);
         throw err;
     }
@@ -172,7 +172,7 @@ function ensureDefaultProfile() {
             voiceGuidance: 'false',
             lastAccess: String(Date.now()),
         };
-        await funcoes.perfilGrava(id, [], fields);
+        await redisFunctions.profileWrite(id, [], fields);
         return { id, nickname: DEFAULT_NICKNAME };
     });
 }
@@ -187,7 +187,7 @@ function removeProfile(id) {
         if (ids.length < 2) throw new ValidationError('The only registered profile cannot be removed.');
 
         const { avatar } = await redis.hgetall(`user:${id}`);
-        await funcoes.perfilRemove(id);
+        await redisFunctions.profileRemove(id);
 
         const others = await Promise.all(ids.filter(x => x !== id).map(x => redis.hgetall(`user:${x}`)));
         const inUse = new Set(others.map(h => h.avatar));

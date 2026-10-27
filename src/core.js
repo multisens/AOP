@@ -2,7 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const mqtt = require('mqtt');
 const redis = require('./redis-client');
-const funcoes = require('./redis-funcoes');
+const redisFunctions = require('./redis-functions');
 const { whenReady } = require('./redis-options');
 const profiles = require('./modules/profile-manager/service');
 const lls = require('./modules/transport-layer-metadata-lls');
@@ -15,16 +15,16 @@ const APPS = appHosts.appsConfig();
 // browser sends in the Origin of its calls, not the proxy target) to the
 // current globalServiceId. Cleared at boot.
 const ORIGINS_KEY = 'origins:associated';
-whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => funcoes.origensLimpa());
+whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => redisFunctions.originsClear());
 
 function registerAssociatedOrigin(origin) {
     const scid = DATA.currentService;
     if (!scid) return Promise.reject(new Error(`sem servico corrente: a origem ${origin} nao foi registrada como associada`));
-    return funcoes.origemRegistra(origin, scid).then(() => origin);
+    return redisFunctions.originRegister(origin, scid).then(() => origin);
 }
 
 function unregisterAssociatedOrigin(origin) {
-    return funcoes.origemRemove(origin).then(() => undefined);
+    return redisFunctions.originRemove(origin).then(() => undefined);
 }
 
 const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {

@@ -46,10 +46,10 @@ for (const [name, fn] of Object.entries({
         writes.push(['FCALL', nome, ...a]);
         const h = hashOf(ORIGENS);
         switch (nome) {
-            case 'tv30_origens_limpa': return store.delete(ORIGENS) ? 1 : 0;
-            case 'tv30_origem_registra': h.set(a[0], a[1]); store.set(ORIGENS, h); return 1;
-            case 'tv30_origem_remove': return h.delete(a[0]) ? 1 : 0;
-            case 'tv30_perfil_grava': {
+            case 'tv30_origins_clear': return store.delete(ORIGENS) ? 1 : 0;
+            case 'tv30_origin_register': h.set(a[0], a[1]); store.set(ORIGENS, h); return 1;
+            case 'tv30_origin_remove': return h.delete(a[0]) ? 1 : 0;
+            case 'tv30_profile_write': {
                 const [id, n] = a;
                 const campos = new Map();
                 for (let i = 2 + Number(n); i + 1 < a.length; i += 2) campos.set(a[i], a[i + 1]);
@@ -57,10 +57,10 @@ for (const [name, fn] of Object.entries({
                 store.set(`user:${id}`, campos);
                 return 1;
             }
-            case 'tv30_perfil_ultimo_acesso': return indice().has(a[0]) ? 1 : 0;
+            case 'tv30_profile_last_access': return indice().has(a[0]) ? 1 : 0;
             // The list of announced services, written at the startup of the
             // core.
-            case 'tv30_servicos_anunciados': store.set('services:announced', new Set(a)); return new Set(a).size;
+            case 'tv30_announced_services': store.set('services:announced', new Set(a)); return new Set(a).size;
             default: throw new Error('ERR Function not found');
         }
     },
@@ -236,7 +236,7 @@ test('boot com a base sem perfil: o gestor cria o perfil padrao (Viewer 1, id UU
     assert.equal(u.name, 'Viewer 1');
     assert.match(u.id, UUID_RE);
     assert.equal(core.getCurrentUser(), u.id);
-    const grava = writes.filter(w => w[1] === 'tv30_perfil_grava');
+    const grava = writes.filter(w => w[1] === 'tv30_profile_write');
     assert.equal(grava.length, 1, 'um perfil padrao so');
     assert.equal(grava[0][3], '0', 'sem visibilidade para servico algum');
     assert.ok(published.some(([t, m, ret]) => t === 'aop/currentUser' && m === u.id && ret));
@@ -251,7 +251,7 @@ test('remocao do perfil corrente: aop/currentUser vazio (retido), aop/removedUse
     await core.refreshUserData();
     assert.equal(core.getUserList().length, 3);
 
-    // Storage no longer has the profile (tv30_perfil_remove) when the core is
+    // Storage no longer has the profile (tv30_profile_remove) when the core is
     // told.
     tiraDoDuble(atual);
     let n0 = published.length;
@@ -314,25 +314,25 @@ test('troca de aplicacao: remove a origem anterior e registra a nova; relancar a
 
     writes.length = 0;
     await core.setDisplayGraphics('http://bcast:8081', '/webmedia', 'urn:tv30:app:w9');
-    assert.deepEqual(writes.filter(w => w[1] === 'tv30_origem_remove'), []);
+    assert.deepEqual(writes.filter(w => w[1] === 'tv30_origin_remove'), []);
     assert.deepEqual(origins(), { 'http://urn-tv30-app-w9.apps.localhost:8080': SID });
 });
 
-test('registro e remocao da origem saem pelas funcoes do Redis (tv30_origem_*), na ordem remove-registra', async () => {
+test('registro e remocao da origem saem pelas funcoes do Redis (tv30_origin_*), na ordem remove-registra', async () => {
     writes.length = 0;
     await core.setDisplayGraphics('http://bcast:8081', '/x', 'urn:tv30:app:p4');
     await core.setDisplayGraphics('http://bcast:8081', '/y', 'urn:tv30:app:p5');
     assert.deepEqual(writes, [
-        ['FCALL', 'tv30_origem_remove', 'http://urn-tv30-app-w9.apps.localhost:8080'],
-        ['FCALL', 'tv30_origem_registra', 'http://urn-tv30-app-p4.apps.localhost:8080', SID],
-        ['FCALL', 'tv30_origem_remove', 'http://urn-tv30-app-p4.apps.localhost:8080'],
-        ['FCALL', 'tv30_origem_registra', 'http://urn-tv30-app-p5.apps.localhost:8080', SID],
+        ['FCALL', 'tv30_origin_remove', 'http://urn-tv30-app-w9.apps.localhost:8080'],
+        ['FCALL', 'tv30_origin_register', 'http://urn-tv30-app-p4.apps.localhost:8080', SID],
+        ['FCALL', 'tv30_origin_remove', 'http://urn-tv30-app-p4.apps.localhost:8080'],
+        ['FCALL', 'tv30_origin_register', 'http://urn-tv30-app-p5.apps.localhost:8080', SID],
     ]);
 });
 
 test('registro recusado pela funcao (esquema): o lancamento rejeita com a mensagem (rota HTTP: 404 {error:200})', async () => {
-    const msg = 'TV30ESQUEMA tv30_origem_registra: origins:associated nome de campo: host deve estar em minusculas';
-    recusa = ['tv30_origem_registra', msg];
+    const msg = 'TV30SCHEMA tv30_origin_register: origins:associated field name: host must be in lowercase';
+    recusa = ['tv30_origin_register', msg];
     try {
         await assert.rejects(core.setDisplayGraphics('http://bcast:8081', '/x', 'urn:tv30:app:q'), { message: msg });
     } finally { recusa = null; }

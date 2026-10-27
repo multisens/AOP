@@ -14,7 +14,7 @@ process.env.USER_DATA_PATH = USER_DATA;
 after(() => fs.rmSync(USER_DATA, { recursive: true, force: true }));
 
 // --- doubles -----------------------------------------------------------------
-// Mimics the effect of tv30_servicos_anunciados (the schema is tested on the
+// Mimics the effect of tv30_announced_services (the schema is tested on the
 // real Redis, infra/redis/test); falhas = how many calls fail as with Redis
 // down.
 let anunciados = new Set(['urn:da-partida-anterior']);
@@ -24,7 +24,7 @@ let smembersFora = false;
 const chamadas = [];
 const fakeRedis = {
     async call(cmd, nome, numkeys, ...args) {
-        if (cmd !== 'FCALL' || nome !== 'tv30_servicos_anunciados' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${nome}: nao suportado pelo duble`);
+        if (cmd !== 'FCALL' || nome !== 'tv30_announced_services' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${nome}: nao suportado pelo duble`);
         chamadas.push(args.map(String));
         if (falhas > 0) { falhas--; throw new Error('connect ECONNREFUSED (duble)'); }
         if (recusa) throw new Error(recusa);
@@ -167,14 +167,14 @@ test('falha do Redis: tenta de novo e so publica depois de gravar', async () => 
 test('recusa do esquema: nao repete nem publica', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
-        recusa = 'TV30ESQUEMA tv30_servicos_anunciados: services:announced membro "x": tem 257 caracteres, maximo 256';
+        recusa = 'TV30SCHEMA tv30_announced_services: services:announced member "x": has 257 characters, maximum 256';
         const n = chamadas.length, p = publicados.length;
         await lls.receive(JSON.stringify([bam('x'.repeat(257), 'Longo')]), 'tlm/lls/bs4/bamt');
         mock.timers.tick(20000);
         await settle();
         assert.equal(chamadas.length, n + 1);
         assert.equal(publicados.length, p);
-        assert.ok(logs.some(l => l.includes('TV30ESQUEMA tv30_servicos_anunciados')));
+        assert.ok(logs.some(l => l.includes('TV30SCHEMA tv30_announced_services')));
     } finally {
         recusa = null;
         mock.timers.reset();
