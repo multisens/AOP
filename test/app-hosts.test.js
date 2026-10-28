@@ -330,6 +330,24 @@ test('registro e remocao da origem saem pelas funcoes do Redis (tv30_origin_*), 
     ]);
 });
 
+test('estado da aplicacao: started ao abrir, ended antes de started na troca, ended ao encerrar', async () => {
+    const STATE = 'aop/application-lifecycle-manager/application-state';
+    await core.setDisplayGraphics();
+    const n0 = published.length;
+    const states = () => published.slice(n0).filter(([t]) => t === STATE).map(([, m, ret]) => ({ ...JSON.parse(m), retained: ret }));
+    await core.setDisplayGraphics('http://bcast:8081', '/x', 'urn:tv30:app:s1');
+    await core.setDisplayGraphics('http://bcast:8081', '/y', 'urn:tv30:app:s2');
+    await core.setDisplayGraphics();
+    const o1 = 'http://urn-tv30-app-s1.apps.localhost:8080';
+    const o2 = 'http://urn-tv30-app-s2.apps.localhost:8080';
+    assert.deepEqual(states(), [
+        { serviceContextId: SID, appId: 'urn:tv30:app:s1', origin: o1, state: 'started', retained: false },
+        { serviceContextId: SID, appId: 'urn:tv30:app:s1', origin: o1, state: 'ended', retained: false },
+        { serviceContextId: SID, appId: 'urn:tv30:app:s2', origin: o2, state: 'started', retained: false },
+        { serviceContextId: SID, appId: 'urn:tv30:app:s2', origin: o2, state: 'ended', retained: false },
+    ]);
+});
+
 test('registro recusado pela funcao (esquema): o lancamento rejeita com a mensagem (rota HTTP: 404 {error:200})', async () => {
     const msg = 'TV30SCHEMA tv30_origin_register: origins:associated field name: host must be in lowercase';
     recusa = ['tv30_origin_register', msg];

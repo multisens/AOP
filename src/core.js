@@ -64,7 +64,8 @@ const _t = {
     gui_layer: 'aop/display/layers/rxgui',
     pmplayer_url : 'aop/display/layers/video/url',
     pmplayer_size : 'aop/display/layers/video/size',
-    graphics_layer: 'aop/display/layers/graphics'
+    graphics_layer: 'aop/display/layers/graphics',
+    application_state: 'aop/application-lifecycle-manager/application-state'
 };
 
 const _topics = new Map([
@@ -141,9 +142,23 @@ function setDisplayGraphics(baseUrl = '', epUrl = '', appId = '') {
         pending.push(registerAssociatedOrigin(next.origin));
     }
 
-    DATA.graphicsApp = next;
+    // The application that leaves ends before the one that enters starts.
+    if (prev) {
+        publishApplicationState(prev, 'ended');
+    }
+    DATA.graphicsApp = next ? { ...next, serviceContextId: DATA.currentService } : null;
+    if (DATA.graphicsApp && DATA.graphicsApp.serviceContextId) {
+        publishApplicationState(DATA.graphicsApp, 'started');
+    }
     client.publish(_t.graphics_layer, next ? appHosts.entryUrl(next.origin, epUrl) : '');
     return Promise.all(pending).then(() => undefined);
+}
+
+// Change of state of the application, for the other components; published
+// here until the Application Lifecycle Manager exists.
+function publishApplicationState(app, state) {
+    const message = { serviceContextId: app.serviceContextId, appId: app.appId, origin: app.origin, state };
+    client.publish(_t.application_state, JSON.stringify(message));
 }
 
 function setVideoURL(url = '') {
