@@ -1,23 +1,25 @@
-// aop-transport-layer-metadata-lls (7.2.2): recebe a LLS da camada de transporte
-// simulada e e a dona da lista dos servicos anunciados (services:announced no
-// Redis e o topico retido aop/services), um por BAM, pelo globalServiceId.
+// aop-transport-layer-metadata-lls (7.2.2): receives the LLS of the simulated
+// transport layer and owns the list of announced services (services:announced
+// in Redis and the retained topic aop/services), one per BAM, by the
+// globalServiceId.
 const redis = require('../../redis-client');
-const funcoes = require('../../redis-funcoes');
+const redisFunctions = require('../../redis-functions');
 
 const TOPIC = 'tlm/lls/#';
 const SERVICES_TOPIC = 'aop/services';
 const SERVICES_KEY = 'services:announced';
 const RETRY_MAX_MS = 10000;
 
-// BAMT de cada fluxo (<bsid>); a recebida por ultimo fica no fim
+// BAMT of each stream (<bsid>); the one received last is at the end.
 const bamts = new Map();
 let publish = null;
 let chain = Promise.resolve();
 let retryTimer = null;
 let failures = 0;
 
-// [{ serviceContextId, bam }]: o globalServiceId e o serviceContextId (C.3.5);
-// repetido em mais de uma BAMT, vale o BAM da recebida por ultimo
+// [{ serviceContextId, bam }]: the globalServiceId is the serviceContextId
+// (C.3.5); repeated in more than one BAMT, the BAM of the one received last
+// prevails.
 function announced() {
     const out = new Map();
     for (const bamt of bamts.values()) {
@@ -30,8 +32,8 @@ function announced() {
     return [...out.values()];
 }
 
-// Uma gravacao por vez, do estado do momento; o topico sai so com o Redis
-// gravado. Falha do Redis tenta de novo; recusa do esquema, nao.
+// One write at a time, of the current state; the topic is published only
+// with Redis written. A Redis failure is retried; a schema refusal is not.
 function commit() {
     chain = chain.then(write);
     return chain;
@@ -40,10 +42,10 @@ function commit() {
 async function write() {
     const ids = announced().map(s => s.serviceContextId);
     try {
-        await funcoes.servicosAnunciados(ids);
+        await redisFunctions.announcedServices(ids);
     } catch (err) {
         failures++;
-        const refused = funcoes.recusaDoEsquema(err);
+        const refused = redisFunctions.isSchemaRefusal(err);
         if (refused || failures === 1) console.error(`[lls] ${SERVICES_KEY} nao gravado (${ids.length} servico(s)): ${err.message}`);
         if (!refused) retry();
         return;
@@ -63,15 +65,15 @@ function retry() {
     retryTimer.unref();
 }
 
-// publish(topico, mensagem) publica retido. A primeira gravacao, sem BAMT
-// ainda, tira do Redis a lista da partida anterior.
+// publish(topic, message) publishes retained. The first write, with no BAMT
+// yet, removes from Redis the list of the previous start.
 function start(pub) {
     publish = pub;
     return commit();
 }
 
-// tlm/lls/<bsid>/bamt; mensagem vazia retira o fluxo. As outras tabelas da LLS
-// nao mudam a lista.
+// tlm/lls/<bsid>/bamt; an empty message removes the stream. The other LLS
+// tables do not change the list.
 function receive(message, topic) {
     const parts = topic.split('/');
     if (parts.length !== 4 || parts[3] !== 'bamt' || !parts[2]) return Promise.resolve();
@@ -92,14 +94,14 @@ function receive(message, topic) {
     return commit();
 }
 
-// Para o Application Catalog: os de services:announced, o conjunto do 304 da
-// borda, com o BAM; sem BAM recebido nao ha o que mostrar. Falha do Redis rejeita.
+// For the Application Catalog: those in services:announced, with the BAM;
+// without a received BAM there is nothing to show. A Redis failure rejects.
 async function services() {
     const inStore = new Set(await redis.smembers(SERVICES_KEY));
     return announced().filter(s => inStore.has(s.serviceContextId));
 }
 
-// { serviceContextId, bam } do servico anunciado, ou undefined
+// { serviceContextId, bam } of the announced service, or undefined.
 function service(scid) {
     return announced().find(s => s.serviceContextId === scid);
 }

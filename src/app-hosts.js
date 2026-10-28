@@ -1,7 +1,6 @@
-// Cada aplicacao de emissora abre na propria origem, http://<rotulo>.<APPS_DOMAIN>:<AOP_PUBLIC_PORT>,
-// com proxy para o bcastEntryPackageUrl da BALD; borda e tv3ws reconhecem o associado
-// pelo Origin. A C.4.1.7 fala em porta de origem atribuida pelo gerenciador e deixa o
-// mecanismo de diferenciacao a implementacao: o testbed usa um host por aplicacao.
+// Each broadcaster application opens on its own origin,
+// http://<label>.<APPS_DOMAIN>:<AOP_PUBLIC_PORT>, with a proxy to the
+// bcastEntryPackageUrl of the BALD.
 const crypto = require('crypto');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
@@ -9,12 +8,12 @@ const DEFAULT_APPS_DOMAIN = 'apps.localhost';
 const DEFAULT_PUBLIC_PORT = 8080;
 const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const PROXY_PREFIX = '/graphicsAppProxy';
-// nome completo de no maximo 253: rotulo (63) + '.' + dominio
+// Full name of at most 253: label (63) + '.' + domain.
 const MAX_DOMAIN = 253 - 64;
 
-// Porta publica = a que o NAVEGADOR usa (no compose, a publicada no host).
-// *.localhost resolve para a maquina de QUEM abre a pagina: com a tela do AoP
-// aberta de outra maquina, APPS_DOMAIN precisa de DNS curinga para o AoP.
+// Public port = the one the browser uses (in the compose, the one published
+// on the host). *.localhost resolves to the machine of whoever opens the
+// page.
 function appsConfig(env = process.env) {
     const rawDomain = env.APPS_DOMAIN === undefined ? '' : String(env.APPS_DOMAIN);
     const domain = (rawDomain.trim() || DEFAULT_APPS_DOMAIN).toLowerCase().replace(/^\.+|\.+$/g, '');
@@ -33,9 +32,10 @@ function shortHash(s) {
     return crypto.createHash('sha256').update(s).digest('hex').slice(0, 8);
 }
 
-// Rotulo DNS do appId (Tabela 10: URN que identifica a aplicacao): acentos saem,
-// o resto fora de [a-z0-9] vira '-'. Acima de 63 caracteres (ou vazio), leva um
-// resumo do id inteiro. urn:a:b e urn-a-b caem no mesmo rotulo.
+// DNS label of the appId (Table 10: URN that identifies the application):
+// accents are removed, the rest outside [a-z0-9] becomes '-'. Above 63
+// characters (or empty), it carries a digest of the whole id. urn:a:b and
+// urn-a-b give the same label.
 function appLabel(id) {
     const raw = id === undefined || id === null ? '' : String(id);
     const label = raw.normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -45,13 +45,13 @@ function appLabel(id) {
     return `${label.slice(0, 54).replace(/-+$/, '')}-${shortHash(raw)}`;
 }
 
-// Origem como o navegador a escreve no cabecalho Origin (porta 80 omitida).
+// Origin as the browser writes it in the Origin header (port 80 omitted).
 function appOrigin(label, cfg) {
     return `http://${label}.${cfg.domain}` + (cfg.port === 80 ? '' : `:${cfg.port}`);
 }
 
-// Aplicacao lancada: rotulo, origem propria e alvo do proxy. null quando o
-// alvo nao e URL http(s) absoluta (nada a abrir nem a registrar).
+// Launched application: label, own origin and proxy target. null when the
+// target is not an absolute http(s) URL.
 function describeApp(appId, target, cfg) {
     let url;
     try {
@@ -65,15 +65,16 @@ function describeApp(appId, target, cfg) {
     return Object.freeze({ appId: id, label, origin: appOrigin(label, cfg), target: String(target) });
 }
 
-// URL que a camada grafica abre: origem da aplicacao + /graphicsAppProxy +
-// bcastEntryPointUrl.
+// URL the graphics layer opens: origin of the application +
+// /graphicsAppProxy + bcastEntryPointUrl.
 function entryUrl(origin, entryPoint = '') {
     const ep = entryPoint ? String(entryPoint) : '';
     return origin + PROXY_PREFIX + (ep.startsWith('/') ? ep : `/${ep}`);
 }
 
-// No host da aplicacao o prefixo e opcional (a pagina pede /js/... a partir da
-// raiz); sai so quando e um segmento inteiro (/graphicsAppProxyX nao e).
+// On the host of the application the prefix is optional (the page asks for
+// /js/... from the root); it is removed only as a whole segment
+// (/graphicsAppProxyX is not).
 function stripPrefix(url) {
     const u = String(url || '/');
     if (u === PROXY_PREFIX) return '/';
@@ -82,13 +83,14 @@ function stripPrefix(url) {
     return u;
 }
 
-// Rotulo do cabecalho Host no dominio das aplicacoes; null fora dele (segue
-// para o AoP). O prefixo volta como esta, mesmo invalido ou com mais de um
-// rotulo: nao casa com nenhuma aplicacao e responde 404.
+// Label of the Host header in the domain of the applications; null outside
+// it. The prefix comes back as is, even if invalid or with more than one
+// label: it matches no application and answers 404.
 function hostLabel(host, cfg) {
     if (!host) return null;
     let h = String(host).trim().toLowerCase();
-    if (h.startsWith('[')) return null;   // IPv6 literal: nunca e host de aplicacao
+    // IPv6 literal: never an application host.
+    if (h.startsWith('[')) return null;
     h = h.replace(/:\d*$/, '').replace(/\.$/, '');
     const suffix = `.${cfg.domain}`;
     if (!h.endsWith(suffix)) return null;
@@ -98,7 +100,8 @@ function hostLabel(host, cfg) {
 function proxyError(tag, status, body, log) {
     return (err, req, res) => {
         log.error(`[${tag}] falha no proxy de ${req.headers.host}${req.originalUrl || req.url}: ${err.message}`);
-        if (typeof res.status !== 'function') {   // socket (upgrade): nao ha resposta HTTP
+        // Socket (upgrade): there is no HTTP response.
+        if (typeof res.status !== 'function') {
             if (typeof res.destroy === 'function') res.destroy();
             return;
         }
@@ -110,9 +113,9 @@ function proxyError(tag, status, body, log) {
     };
 }
 
-// Roteamento por Host, montado primeiro no server.js: um host de aplicacao nunca
-// chega as paginas, aos estaticos nem ao express.json do AoP (o corpo segue
-// intacto). lookup(rotulo) devolve a aplicacao em execucao ou null.
+// Routing by Host: an application host never reaches the pages, the static
+// files or the express.json of the AoP (the body stays intact).
+// lookup(label) returns the running application or null.
 function appHostProxy({ cfg, lookup, log = console }) {
     const proxy = createProxyMiddleware({
         target: '',
@@ -139,9 +142,10 @@ function appHostProxy({ cfg, lookup, log = console }) {
     };
 }
 
-// /graphicsAppProxy/<caminho> no host do PROPRIO AoP (req.url ja vem sem o
-// prefixo): 302 para o mesmo caminho no host da aplicacao em execucao; sem
-// aplicacao, 404. getApp() devolve a aplicacao ({ origin, ... }) ou null.
+// /graphicsAppProxy/<path> on the host of the AoP itself (req.url comes
+// without the prefix): 302 to the same path on the host of the running
+// application; without one, 404. getApp() returns the application
+// ({ origin, ... }) or null.
 function legacyGraphicsRedirect({ getApp, log = console }) {
     return function legacyRedirect(req, res) {
         const app = getApp();

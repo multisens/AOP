@@ -1,12 +1,12 @@
 const core = require('../../core');
 const lls = require('../transport-layer-metadata-lls');
 const { avatarHtml } = require('../profile-manager/avatar');
-// appName, appIcon e globalServiceId (BAM da emissora) e nickname (POST
-// /profile/create) vao escapados: a view exibe este HTML com <%- %>
+// appName, appIcon and globalServiceId (BAM of the broadcaster) and nickname
+// (POST /profile/create) are escaped: the view shows this HTML with <%- %>.
 const { escapeHtml, svgImageHtml } = require('../../html');
 
 
-// os servicos anunciados, da unidade dona da lista; falha do Redis rejeita
+// The announced services; a Redis failure rejects.
 async function cards() {
 	var services = await lls.services();
 	var cards_in_line = 4;
