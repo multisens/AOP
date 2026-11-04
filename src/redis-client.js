@@ -1,7 +1,7 @@
 require('dotenv').config();
 const Redis = require('ioredis');
 
-// Escritas so por ./redis-funcoes.js; falha rapida e log: ./redis-options.js.
+// Escritas so por ./redis-functions.js; falha rapida e log: ./redis-options.js.
 const { redisOptions, logRedisEvents } = require('./redis-options');
 
 const options = redisOptions();

@@ -133,9 +133,9 @@
             let player = null;
             let publishTopic = null;
 
-            // MQTT na PROPRIA origem da pagina, em /mqtt; o AoP repassa ao
-            // mosquitto (src/mqtt-ws.js). location.host e o nome e a porta pelos
-            // quais a pagina foi aberta, nunca um nome de servico do Docker.
+            // MQTT on the page's OWN origin, on /mqtt; the AoP passes it on to
+            // mosquitto (src/mqtt-ws.js). location.host is the name and port by
+            // which the page was opened.
             function connect() {
                 const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
                 const client = mqtt.connect(`${scheme}://${window.location.host}/mqtt`, {
@@ -147,8 +147,9 @@
                     subscribe_topics(client);
                     fetch('ready');
                 });
-                // excecao no tratamento vai para o console: se escapasse para o
-                // cliente MQTT, a pagina pararia de tratar as mensagens seguintes
+                // An exception in the handling goes to the console: escaping to
+                // the MQTT client, it would stop the page from handling the
+                // next messages.
                 client.on('message', (t, m) => {
                     try {
                         mqtt_message(client, t, m);
@@ -163,8 +164,8 @@
                 client.subscribe('aop/display/layers/+', { noLocal : true });
                 client.subscribe('aop/display/layers/video/+', { noLocal : true });
                 client.subscribe('aop/display/layers/popup/+/message', { noLocal : true });
-                // QR code e PIN do pareamento (C.4.3.2, C.4.3.3) e aviso
-                // (C.6.14.5): o tv3ws publica em popup/<tipo>, sem /message
+                // QR code and PIN of the pairing (C.4.3.2, C.4.3.3) and notice
+                // (C.6.14.5): published on popup/<type>, without /message.
                 client.subscribe('aop/display/layers/popup/+', { noLocal : true });
                 client.subscribe('video/event', { noLocal : true });
             }
@@ -247,7 +248,8 @@
                     $('#video').css(JSON.parse(message));
                 }
                 else if (t.startsWith('popup') ) {
-                    // abertura, fechamento e conferencia da mensagem: /js/popup.js
+                    // Opening, closing and checking of the message:
+                    // /js/popup.js.
                     handlePopupMessage(t.split('/')[1], message.toString());
                 }
             }
@@ -272,17 +274,17 @@
                 }
             }
 
-            // A aplicacao de emissora roda na propria origem, e a politica de
-            // mesma origem impede disparar o evento no documento dela: vai por
-            // postMessage, so para essa origem, e a ponte do bcast
-            // (bcast/public/js/aop-bridge.js) o redespacha com o mesmo formato.
+            // The broadcaster application runs on its own origin, and the
+            // same-origin policy prevents dispatching the event in its
+            // document: it goes by postMessage, only to that origin.
             function graphics_event(name, init) {
                 const frame = document.getElementById('graphics');
                 if (!frame.getAttribute('src') || !frame.contentWindow) return;
                 let doc = null;
                 try { doc = frame.contentDocument; } catch (_) { doc = null; }
                 if (doc) {
-                    // documento inicial (about:blank) enquanto carrega: nada a avisar
+                    // Initial document (about:blank) while loading: nothing to
+                    // notify.
                     if (doc.location.href == 'about:blank') return;
                     doc.dispatchEvent(name == 'keydown'
                         ? new KeyboardEvent('keydown', { key: init.key })

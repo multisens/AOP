@@ -29,8 +29,8 @@ router.get('/appcat', (req, res) => {
     res.status(200).send();
 });
 
-// espera o registro da origem associada; falha do Redis -> 404 {error:200},
-// com a aplicacao ja na camada grafica.
+// Waits for the registration of the associated origin; a Redis failure gives
+// 404 {error:200}, with the application already in the graphics layer.
 router.get('/fullscr', async (req, res) => {
     await service.fullscreen();
     res.status(200).send();

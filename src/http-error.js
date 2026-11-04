@@ -1,6 +1,6 @@
-// Ultimo middleware: excecao em rota (inclusive promessa rejeitada, que o
-// Express 5 encaminha para ca, como falha do Redis) vira 404 {error:200} no
-// formato C.3.2, em vez de pagina HTML de erro ou rota que nunca responde.
+// Last middleware: an exception in a route (a rejected promise included,
+// which Express 5 forwards here, as a Redis failure) becomes 404
+// {error:200} in the C.3.2 format.
 function platformErrorHandler(err, req, res, next) {
     if (res.headersSent) return next(err);
     const msg = err && err.message ? err.message : String(err);

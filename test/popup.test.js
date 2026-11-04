@@ -1,6 +1,7 @@
-// Pop-ups da camada grafica (public/js/popup.js e o repasse de
-// graphic-overlays/view.ejs), num contexto vm com dubles do jQuery (#popup), do
-// QRCode, do relogio e da publicacao MQTT; o desenho de verdade e no Chrome.
+// Pop-ups of the graphics layer (public/js/popup.js and the passing on of
+// graphic-overlays/view.ejs), in a vm context with doubles of jQuery
+// (#popup), QRCode, the clock and the MQTT publication; the real drawing is
+// in Chrome.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -13,9 +14,11 @@ const QR = 'aop/display/layers/popup/qrcode';
 const PIN = 'aop/display/layers/popup/pin';
 const YESNO = 'aop/display/layers/popup/yesno/message';
 const CLOSE = '{"close":true}';
-const PRAZO = 120000;   // tv3ws: PAIRING_POPUP_TIMEOUT_MS
+// tv3ws: PAIRING_POPUP_TIMEOUT_MS
+const PRAZO = 120000;
 
-// Script inline da pagina com mqtt_message (o primeiro <script> sem src).
+// Inline script of the page with mqtt_message (the first <script> without
+// src).
 function viewScript() {
     const html = fs.readFileSync(VIEW, 'utf8');
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
@@ -25,7 +28,7 @@ function viewScript() {
 }
 
 function page() {
-    // relogio de teste
+    // Test clock.
     let now = 0;
     let seq = 0;
     const timers = new Map();
@@ -43,7 +46,7 @@ function page() {
         now = end;
     };
 
-    // #popup: so o que popup.js usa
+    // #popup: only what popup.js uses.
     const el = { html: '', visible: false, height: '' };
     const popupEl = {
         html(s) { if (s === undefined) return el.html; el.html = s; return popupEl; },
@@ -53,7 +56,7 @@ function page() {
     };
     const $ = sel => {
         if (sel === '#popup') return popupEl;
-        throw new Error(`seletor nao previsto no duble: ${sel}`);
+        throw new Error(`seletor not in the schema no duble: ${sel}`);
     };
     const qrcodes = [];
     function QRCode(target, opts) { qrcodes.push({ target, text: opts.text }); }
@@ -66,7 +69,8 @@ function page() {
     vm.runInContext(fs.readFileSync(POPUP_JS, 'utf8'), ctx, { filename: 'popup.js' });
     vm.runInContext(viewScript(), ctx, { filename: 'view.ejs' });
     const published = [];
-    // a lista e o par saem deste lado (deepEqual compara o prototipo do Array)
+    // The list and the pair come from this side (deepEqual compares the Array
+    // prototype).
     ctx.__publish = (t, m) => published.push([t, m]);
     vm.runInContext('publishTopic = (t, m) => __publish(t, m);', ctx);
 
@@ -124,7 +128,8 @@ test('fechamento de outro tipo nao fecha o pop-up na tela', () => {
     assert.equal(p.el.visible, true);
     assert.match(p.el.html, /0042/);
 
-    p.deliver(QR, open('chave'));   // o QR code substitui o PIN
+    // The QR code replaces the PIN.
+    p.deliver(QR, open('chave'));
     p.deliver(PIN, CLOSE);
     assert.equal(p.el.visible, true);
     assert.equal(p.state().popup_type, 'qrcode');
@@ -159,28 +164,33 @@ test('mensagem invalida nao lanca e nao muda a tela', () => {
         assert.doesNotThrow(() => p.deliver(PIN, bad), bad);
         assert.deepEqual(p.el, before, `tela intacta com ${JSON.stringify(bad)}`);
     }
-    // tipo desconhecido e topico sem tipo
+    // An unknown type and a topic without a type.
     assert.doesNotThrow(() => p.deliver('aop/display/layers/popup/xyz', open('x')));
     assert.doesNotThrow(() => p.deliver('aop/display/layers/popup', open('x')));
     assert.deepEqual(p.el, before);
     assert.equal(p.qrcodes.length, 1);
     assert.ok(p.warnings.length > 0, 'mensagens ignoradas vao para o console');
-    // a pagina continua tratando mensagens
+    // The page keeps handling messages.
     p.deliver(QR, CLOSE);
     assert.equal(p.el.visible, false);
 });
 
 test('prazo de um pop-up que ja saiu nao fecha o seguinte', () => {
     const p = page();
-    p.deliver(QR, open('A'));            // prazo de A: t = 120 s
+    // Deadline of A: t = 120 s.
+    p.deliver(QR, open('A'));
     p.advance(100000);
-    p.deliver(QR, CLOSE);                // A pareou em t = 100 s
+    // A paired at t = 100 s.
+    p.deliver(QR, CLOSE);
     p.advance(10000);
-    p.deliver(QR, open('B'));            // prazo de B: t = 230 s
-    p.advance(15000);                    // t = 125 s: o prazo de A ja passou
+    // Deadline of B: t = 230 s.
+    p.deliver(QR, open('B'));
+    // t = 125 s: the deadline of A has passed.
+    p.advance(15000);
     assert.equal(p.el.visible, true, 'B continua na tela');
     assert.deepEqual(p.qrcodes.map(q => q.text), ['A', 'B']);
-    p.advance(105000);                   // t = 230 s
+    // t = 230 s
+    p.advance(105000);
     assert.equal(p.el.visible, false);
 });
 
@@ -223,26 +233,26 @@ test('sim/nao substituido pelo QR code: sem resposta atrasada do sim/nao, teclas
 
 test('excecao no tratamento de uma mensagem nao escapa para o cliente MQTT da pagina', () => {
     const p = page();
-    // connect() de view.ejs com um cliente MQTT duble
+    // connect() of view.ejs with an MQTT client double.
     const handlers = {};
     const fakeClient = { on: (ev, h) => { handlers[ev] = h; }, subscribe() {}, publish() {} };
     p.ctx.mqtt = { connect: () => fakeClient };
     p.ctx.location = { protocol: 'http:', host: 'tv.test' };
     p.ctx.fetch = () => undefined;
     vm.runInContext('connect()', p.ctx);
-    // video/size com JSON invalido: o JSON.parse de mqtt_message lanca
+    // video/size with invalid JSON: the JSON.parse of mqtt_message throws
     assert.doesNotThrow(() => handlers.message('aop/display/layers/video/size', Buffer.from('{')));
     assert.ok(p.warnings.some(w => /video\/size nao tratada/.test(w)), p.warnings.join(' | '));
-    // e a pagina segue tratando as mensagens seguintes
+    // and the page keeps handling the next messages.
     handlers.message(QR, Buffer.from(open('chave')));
     assert.equal(p.el.visible, true);
     handlers.message(QR, Buffer.from(CLOSE));
     assert.equal(p.el.visible, false);
 });
 
-// --- injecao de HTML no pop-up -------------------------------------------------
-// Mensagem do sim/nao como o tv3ws a monta (api/client-identification/
-// service.ts, askAuthorization), com o display-name escolhido pelo cliente.
+// --- HTML injection in the pop-up --------------------------------------------
+// Yes/no message as tv3ws builds it (api/client-identification/service.ts,
+// askAuthorization), with the display-name chosen by the client.
 const askMessage = displayName => `A aplicação "${displayName}" deseja acessar as informações do sinal de TV Digital.\nVocê deseja autorizar isto?`;
 const INJECAO = '<img src=x onerror="window.__injetado=1">';
 const INJECAO_ESCAPADA = '&lt;img src=x onerror=&quot;window.__injetado=1&quot;&gt;';
@@ -253,7 +263,7 @@ test('sim/nao: display-name com HTML entra escapado, e os botoes seguem os do po
     assert.equal(p.el.visible, true);
     assert.ok(p.el.html.includes(INJECAO_ESCAPADA), p.el.html);
     assert.ok(!p.el.html.includes('<img'), `HTML do display-name na tela: ${p.el.html}`);
-    // o resto do pop-up e o markup fixo de popup.js
+    // The rest of the pop-up is the fixed markup of popup.js.
     assert.equal((p.el.html.match(/<span /g) || []).length, 1);
     assert.match(p.el.html, /<div id="btyes" class="button focused"/);
     assert.match(p.el.html, /<div id="btno" class="button"/);
@@ -295,9 +305,9 @@ test('QR code: o valor vai so para a biblioteca, como texto; o HTML do pop-up e 
     assert.equal(p.el.html, '<span class="text">Escaneie o QR code abaixo com seu dispositivo.</span>\n<div id="qrcode"></div>');
 });
 
-// --- aviso informativo (C.6.14.5) ----------------------------------------------
-// O tv3ws publica em popup/info {"value", "timeout": 5000}; o aviso nao tira
-// outro pop-up da tela: espera numa fila de 3.
+// --- informative notice (C.6.14.5) -------------------------------------------
+// tv3ws publishes on popup/info {"value", "timeout": 5000}; the notice does
+// not take another pop-up off the screen: it waits in a queue of 3.
 const INFO = 'aop/display/layers/popup/info';
 const aviso = (value, timeout = 5000) => JSON.stringify({ value, timeout });
 const AVISO = 'A emissora urn:tv30:service:users-test atualizou os dados do perfil Viewer 1.';
@@ -437,7 +447,7 @@ test('aviso (info) na tela substituido pelo sim/nao, QR code ou PIN: volta para 
     p.advance(1);
     assert.equal(p.el.visible, false);
 
-    // o QR code tambem substitui; o aviso volta no fechamento
+    // The QR code also replaces; the notice comes back on closing.
     p.deliver(INFO, aviso('outro'));
     p.deliver(QR, open('chave'));
     assert.equal(p.state().popup_type, 'qrcode');

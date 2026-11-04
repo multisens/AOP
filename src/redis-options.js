@@ -1,8 +1,9 @@
-// Opcoes do cliente Redis, fora do cliente para testar sem conexao. Falha de
-// Redis e rapida e explicita, nunca trava a rota (com maxRetriesPerRequest
-// null, o comando sem conexao esperaria para sempre): comando sem conexao falha
-// apos uma nova tentativa (~0,2 a 1 s); commandTimeout cobre o Redis que aceita
-// conexao e nao responde; a fila offline so segura boot e reconexao curta.
+// Options of the Redis client, outside the client to be testable without a
+// connection. A Redis failure is fast and explicit, and never hangs a route
+// (with maxRetriesPerRequest null, a command without a connection would wait
+// forever): a command without a connection fails after one retry (~0.2 to
+// 1 s); commandTimeout covers a Redis that accepts the connection and does
+// not answer; the offline queue only holds boot and a short reconnection.
 const FAIL_FAST_OPTIONS = Object.freeze({
     connectTimeout: 2000,
     commandTimeout: 1500,
@@ -21,8 +22,8 @@ function redisOptions(overrides = {}) {
     };
 }
 
-// Log explicito de conexao: pronto, perda, falhas (a primeira de cada
-// sequencia, e o total ao voltar) e encerramento.
+// Logs the connection events: ready, loss, failures (the first of each
+// sequence, and the total on recovery) and end.
 function logRedisEvents(client, where, log = console.error) {
     let wasReady = false;
     let failures = 0;
@@ -45,7 +46,7 @@ function logRedisEvents(client, where, log = console.error) {
     client.on('end', () => log(`[redis] cliente de ${where} encerrado; sem novas tentativas`));
 }
 
-// Tarefa de boot que precisa do Redis: roda uma vez, no primeiro 'ready'.
+// Boot task that needs Redis: runs once, on the first 'ready'.
 function whenReady(client, name, task) {
     const run = () => {
         Promise.resolve()

@@ -1,15 +1,15 @@
 require('dotenv').config();
 const core = require('../../../core');
 const { avatarHtml } = require('../avatar');
-// nickname e id vem do POST /profile/create e vao escapados: a view exibe este
-// HTML com <%- %> ("<svg/onload=alert()>" cabe nos 20 caracteres do nickname)
+// nickname and id come from POST /profile/create and are escaped: the view
+// shows this HTML with <%- %>.
 const { escapeHtml } = require('../../../html');
 
 
 function cards() {
 	var usr = core.getUserList();
 	var num = usr.length;
-	// o unico perfil registrado nao pode ser removido: sem a opcao
+	// The only registered profile cannot be removed: no option.
 	var removable = num > 1;
 
 	var html = '';

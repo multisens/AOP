@@ -2,30 +2,29 @@ require('dotenv').config();
 const fs = require('fs');
 const mqtt = require('mqtt');
 const redis = require('./redis-client');
-const funcoes = require('./redis-funcoes');
+const redisFunctions = require('./redis-functions');
 const { whenReady } = require('./redis-options');
 const profiles = require('./modules/profile-manager/service');
 const lls = require('./modules/transport-layer-metadata-lls');
 const appHosts = require('./app-hosts');
 
-// Origem propria de cada aplicacao (./app-hosts.js); o server.js ja a validou.
+// Own origin of each application (./app-hosts.js), already validated.
 const APPS = appHosts.appsConfig();
 
-// origins:associated: origem da aplicacao em execucao (a que o navegador manda
-// no Origin das chamadas dela, nao o alvo do proxy) -> globalServiceId corrente,
-// que a borda compara com o contexto de servico do caminho: a aplicacao so
-// dispensa o bind-token no proprio contexto. Limpa no boot (sem entrada orfa).
+// origins:associated: origin of the running application (the one the
+// browser sends in the Origin of its calls, not the proxy target) to the
+// current globalServiceId. Cleared at boot.
 const ORIGINS_KEY = 'origins:associated';
-whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => funcoes.origensLimpa());
+whenReady(redis, `limpeza de ${ORIGINS_KEY}`, () => redisFunctions.originsClear());
 
 function registerAssociatedOrigin(origin) {
     const scid = DATA.currentService;
     if (!scid) return Promise.reject(new Error(`sem servico corrente: a origem ${origin} nao foi registrada como associada`));
-    return funcoes.origemRegistra(origin, scid).then(() => origin);
+    return redisFunctions.originRegister(origin, scid).then(() => origin);
 }
 
 function unregisterAssociatedOrigin(origin) {
-    return funcoes.origemRemove(origin).then(() => undefined);
+    return redisFunctions.originRemove(origin).then(() => undefined);
 }
 
 const client = mqtt.connect(`mqtt://${process.env.MQTT_HOST}`, {
@@ -40,7 +39,8 @@ const DATA = {
         current: '',
         previous: ''
     },
-    // aplicacao na camada grafica: { appId, label, origin, target } ou null
+    // Application in the graphics layer: { appId, label, origin, target } or
+    // null.
     graphicsApp: null,
     videoStreamURL: '',
     currentUser: '',
@@ -64,7 +64,8 @@ const _t = {
     gui_layer: 'aop/display/layers/rxgui',
     pmplayer_url : 'aop/display/layers/video/url',
     pmplayer_size : 'aop/display/layers/video/size',
-    graphics_layer: 'aop/display/layers/graphics'
+    graphics_layer: 'aop/display/layers/graphics',
+    application_state: 'aop/application-lifecycle-manager/application-state'
 };
 
 const _topics = new Map([
@@ -121,9 +122,10 @@ function setDisplayGui(screen) {
     DATA.rxgui.current = screen;
 }
 
-// baseUrl = bcastEntryPackageUrl (alvo do proxy), epUrl = bcastEntryPointUrl,
-// appId = appId da BALD (rotulo do host; sem ele, o servico corrente). Sem
-// baseUrl, encerra a aplicacao. Publica na hora; a promessa e a do registro.
+// baseUrl = bcastEntryPackageUrl (proxy target), epUrl = bcastEntryPointUrl,
+// appId = appId of the BALD (host label; without it, the current service).
+// Without baseUrl, ends the application. Publishes at once; the promise is
+// the one of the registration.
 function setDisplayGraphics(baseUrl = '', epUrl = '', appId = '') {
     let next = null;
     if (baseUrl !== '') {
@@ -140,9 +142,23 @@ function setDisplayGraphics(baseUrl = '', epUrl = '', appId = '') {
         pending.push(registerAssociatedOrigin(next.origin));
     }
 
-    DATA.graphicsApp = next;
+    // The application that leaves ends before the one that enters starts.
+    if (prev) {
+        publishApplicationState(prev, 'ended');
+    }
+    DATA.graphicsApp = next ? { ...next, serviceContextId: DATA.currentService } : null;
+    if (DATA.graphicsApp && DATA.graphicsApp.serviceContextId) {
+        publishApplicationState(DATA.graphicsApp, 'started');
+    }
     client.publish(_t.graphics_layer, next ? appHosts.entryUrl(next.origin, epUrl) : '');
     return Promise.all(pending).then(() => undefined);
+}
+
+// Change of state of the application, for the other components; published
+// here until the Application Lifecycle Manager exists.
+function publishApplicationState(app, state) {
+    const message = { serviceContextId: app.serviceContextId, appId: app.appId, origin: app.origin, state };
+    client.publish(_t.application_state, JSON.stringify(message));
 }
 
 function setVideoURL(url = '') {
@@ -165,9 +181,9 @@ function setVideoSize(top = '0', left = '0', width = '100%', height = '100%') {
     }));
 }
 
-// Perfis lidos direto do armazenamento: a restricao de divulgacao da C.6.14.1
-// vale para clientes da API; o gestor de perfis da plataforma ve todos. Base
-// sem perfil ganha o perfil padrao. Falha do Redis rejeita (rota HTTP: 404 {error:200}).
+// Profiles read directly from storage, all of them, without the visibility
+// filter. A base without profiles gets the default profile. A Redis failure
+// rejects.
 async function refreshUserData() {
     let ids = await redis.smembers('users:index');
     if (ids.length === 0) {
@@ -185,8 +201,8 @@ async function refreshUserData() {
     console.log(`Loaded ${DATA.users.length} users from Redis`);
 }
 
-// Caminho do boot/MQTT (sem rota para responder): tenta de novo e loga. Sem
-// perfil corrente, o primeiro; depois disso, so a escolha no seletor o define.
+// Boot and MQTT path: retries and logs. Without a current profile, the
+// first one; after that, only the choice in the chooser sets it.
 async function loadUserData(attempt = 1) {
     try {
         await refreshUserData();
@@ -194,7 +210,7 @@ async function loadUserData(attempt = 1) {
             await setCurrentUser(DATA.users[0].id);
         }
     } catch (err) {
-        // Redis pode demorar pra subir: retry, no maximo 5x, com backoff.
+        // Redis may be slow to start: retry, at most 5 times, with backoff.
         if (attempt < 5) {
             const delay = attempt * 2000;
             console.log(`Falha carregando users do Redis (tentativa ${attempt}/${5}, retry em ${delay}ms): ${err.message}`);
@@ -205,9 +221,9 @@ async function loadUserData(attempt = 1) {
     }
 }
 
-// A plataforma grava o lastAccess em toda troca de usuario corrente, inclusive
-// a que chega por aop/currentUser de outro componente (C.6.14.4 no tv3ws). O
-// eco da propria publicacao e ignorado; o retido recebido no boot conta como acesso.
+// Writes lastAccess on every change of the current user, including one that
+// arrives on aop/currentUser. The echo of its own publication is ignored;
+// the retained message received at boot counts as an access.
 function loadCurrentUser(message) {
     const uid = message.toString();
     if (uid === DATA.currentUser) return;
@@ -216,8 +232,8 @@ function loadCurrentUser(message) {
         .catch(err => console.error(`[profiles] falha gravando lastAccess de ${uid}: ${err.message}`));
 }
 
-// Grava o lastAccess primeiro: se o armazenamento falhar, a troca nao acontece
-// e quem chamou recebe o erro (rota: 404 {error:200}).
+// Writes lastAccess first: if storage fails, the change does not happen and
+// the error is thrown.
 async function setCurrentUser(uid) {
     await profiles.touchLastAccess(uid.toString());
     DATA.currentUser = uid.toString();
@@ -228,9 +244,9 @@ function getCurrentUser() {
     return DATA.currentUser;
 }
 
-// Perfil ja removido do armazenamento: o corrente removido deixa
-// aop/currentUser vazio ate a escolha no seletor; a remocao vai a
-// aop/removedUser, e a plataforma volta ao seletor de perfil.
+// A profile already removed from storage: removing the current one leaves
+// aop/currentUser empty until the choice in the chooser; the removal goes to
+// aop/removedUser, and the platform goes back to the profile chooser.
 function profileRemoved(uid) {
     const i = DATA.users.findIndex(u => u.id === uid);
     if (i >= 0) DATA.users.splice(i, 1);
@@ -273,7 +289,7 @@ function unsetCurrentService() {
     DATA.serviceMetadata = {};
 }
 
-// { serviceContextId, bam } do servico corrente, pela LLS recebida
+// { serviceContextId, bam } of the current service, from the received LLS.
 function getCurrentService() {
     return lls.service(DATA.currentService);
 }
@@ -314,13 +330,13 @@ function setBALDHandler(handler) {
     DATA.serviceMetadata.baldHandler = handler;
 }
 
-// Aplicacao em execucao na camada grafica ({ appId, label, origin, target })
-// ou null; usada pelo redirecionamento de /graphicsAppProxy no host do AoP.
+// Application running in the graphics layer ({ appId, label, origin, target
+// }) or null.
 function getGraphicsApp() {
     return DATA.graphicsApp;
 }
 
-// Aplicacao em execucao com este rotulo de host, ou null (roteamento por Host).
+// Application running with this host label, or null.
 function getGraphicsAppByLabel(label) {
     return DATA.graphicsApp && DATA.graphicsApp.label === label ? DATA.graphicsApp : null;
 }
@@ -329,7 +345,7 @@ function getVideoStreamURL() {
     return DATA.videoStreamURL;
 }
 
-// Devolve a promessa da remocao da origem associada.
+// Returns the promise of the removal of the associated origin.
 function openServiceInfo() {
     if (DATA.rxgui.current == '') {
         setDisplayGui(`${GUI.bootstrap_app}?mode=info`);

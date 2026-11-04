@@ -6,8 +6,8 @@ const router = express.Router();
 const service = require('./service');
 
 router.get('/', async (req, res, next) => {
-    // O chooser roda SEM servico ativo: limpa o aop/currentService retido (pode
-    // ter ficado no broker apos um restart). Falha do Redis -> 404 {error:200}.
+    // The chooser runs WITHOUT an active service: clears the retained
+    // aop/currentService. A Redis failure gives 404 {error:200}.
     core.unsetCurrentService();
     await core.refreshUserData();
 
@@ -27,7 +27,7 @@ router.get('/create', (req, res) => {
 
 router.get('/select', async (req, res) => {
     if (req.query.id) {
-        // grava o lastAccess; falha do Redis -> 404 {error:200}
+        // Writes lastAccess; a Redis failure gives 404 {error:200}.
         await core.setCurrentUser(req.query.id);
         core.setDisplayGui(core.GUI.app_catalogue);
         res.status(200).send();

@@ -1,6 +1,6 @@
-// aop-transport-layer-metadata-lls com o Redis por duble: a BAMT recebida vira
-// services:announced (pela funcao) e aop/services retido; o Application
-// Catalog mostra os servicos desse conjunto, o mesmo que a borda confere no 304.
+// aop-transport-layer-metadata-lls with Redis by a double: the received BAMT
+// becomes services:announced (by the function) and the retained
+// aop/services; the Application Catalog shows the services of that set.
 const { test, after, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -13,9 +13,10 @@ const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'aop-lls-'));
 process.env.USER_DATA_PATH = USER_DATA;
 after(() => fs.rmSync(USER_DATA, { recursive: true, force: true }));
 
-// --- dubles ---------------------------------------------------------------------
-// imita o efeito de tv30_servicos_anunciados (o esquema e testado no Redis
-// real, infra/redis/test); falhas = quantas chamadas falham como Redis fora
+// --- doubles -----------------------------------------------------------------
+// Mimics the effect of tv30_announced_services (the schema is tested on the
+// real Redis, infra/redis/test); falhas = how many calls fail as with Redis
+// down.
 let anunciados = new Set(['urn:da-partida-anterior']);
 let falhas = 0;
 let recusa = null;
@@ -23,7 +24,7 @@ let smembersFora = false;
 const chamadas = [];
 const fakeRedis = {
     async call(cmd, nome, numkeys, ...args) {
-        if (cmd !== 'FCALL' || nome !== 'tv30_servicos_anunciados' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${nome}: nao suportado pelo duble`);
+        if (cmd !== 'FCALL' || nome !== 'tv30_announced_services' || Number(numkeys) !== 0) throw new Error(`call ${cmd} ${nome}: nao suportado pelo duble`);
         chamadas.push(args.map(String));
         if (falhas > 0) { falhas--; throw new Error('connect ECONNREFUSED (duble)'); }
         if (recusa) throw new Error(recusa);
@@ -80,7 +81,7 @@ async function pagina() {
 }
 const cartoes = html => [...html.matchAll(/selectParam="([^"]*)"/g)].map(m => m[1]);
 
-// --- unidade dona ---------------------------------------------------------------
+// --- owning unit -------------------------------------------------------------
 test('partida: antes de qualquer BAMT grava a lista vazia (tira a da partida anterior) e publica [] retido', async () => {
     await lls.start((t, m) => publicados.push([t, m]));
     assert.deepEqual(chamadas, [[]]);
@@ -122,14 +123,14 @@ test('BAMT retirada (mensagem vazia): os servicos so daquele fluxo saem', async 
     assert.equal(lls.service(A), undefined);
 });
 
-// --- Application Catalog -------------------------------------------------------
+// --- Application Catalog -----------------------------------------------------
 test('Application Catalog: a tela mostra os servicos de services:announced, com o BAM, e so eles', async () => {
     let r = await pagina();
     assert.equal(r.status, 200);
     assert.deepEqual(cartoes(r.body), [B, C]);
     assert.ok(r.body.includes('<span>Canal B novo</span>') && r.body.includes('<span>Canal C</span>'));
-    // fora do conjunto que a borda confere, fora da tela; no conjunto sem BAM
-    // recebido, sem o que mostrar
+    // Outside the set, off the screen; in the set without a received BAM,
+    // nothing to show.
     anunciados = new Set([C, 'urn:sem-bam']);
     r = await pagina();
     assert.deepEqual(cartoes(r.body), [C]);
@@ -145,7 +146,7 @@ test('Application Catalog: falha do Redis na leitura da lista -> 404 {error:200}
     } finally { smembersFora = false; }
 });
 
-// --- falhas na gravacao ---------------------------------------------------------
+// --- write failures ----------------------------------------------------------
 test('falha do Redis: tenta de novo e so publica depois de gravar', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
@@ -166,14 +167,14 @@ test('falha do Redis: tenta de novo e so publica depois de gravar', async () => 
 test('recusa do esquema: nao repete nem publica', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
-        recusa = 'TV30ESQUEMA tv30_servicos_anunciados: services:announced membro "x": tem 257 caracteres, maximo 256';
+        recusa = 'TV30SCHEMA tv30_announced_services: services:announced member "x": has 257 characters, maximum 256';
         const n = chamadas.length, p = publicados.length;
         await lls.receive(JSON.stringify([bam('x'.repeat(257), 'Longo')]), 'tlm/lls/bs4/bamt');
         mock.timers.tick(20000);
         await settle();
         assert.equal(chamadas.length, n + 1);
         assert.equal(publicados.length, p);
-        assert.ok(logs.some(l => l.includes('TV30ESQUEMA tv30_servicos_anunciados')));
+        assert.ok(logs.some(l => l.includes('TV30SCHEMA tv30_announced_services')));
     } finally {
         recusa = null;
         mock.timers.reset();

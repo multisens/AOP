@@ -1,4 +1,5 @@
-// Criacao e remocao de perfil: views e backend da propria plataforma (../service.js).
+// Creation and removal of profiles: views and backend of the platform itself
+// (../service.js).
 const ejs = require('ejs');
 const express = require('express');
 const path = require('path');
@@ -15,8 +16,8 @@ router.get('/create', async (req, res) => {
     res.send(html);
 });
 
-// so erro de validacao responde 400 {error: mensagem} (contrato da view);
-// falha do armazenamento sobe e vira 404 {error:200} (platformErrorHandler)
+// Only a validation error answers 400 {error: message}; a storage failure is
+// thrown and becomes 404 {error:200} (platformErrorHandler).
 router.post('/create', async (req, res) => {
     let result;
     try {
@@ -32,8 +33,8 @@ router.post('/create', async (req, res) => {
     res.status(201).json(result);
 });
 
-// Remocao pelo telespectador, a partir da tela de escolha de perfil (nao ha
-// API do Anexo C para ela); mesmo contrato de erro da criacao
+// Removal by the viewer, from the profile choice screen; the same error
+// contract as the creation.
 router.post('/remove', async (req, res) => {
     const id = String((req.body && req.body.id) || '');
     try {

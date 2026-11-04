@@ -1,7 +1,7 @@
-// Avatar padrao, paleta e arquivo do avatar. O campo avatar do perfil e o NOME
-// de um arquivo de <USER_DATA_PATH>/thumbs (Tabela 7: "Path indicating the file
-// with the graphical representation of the viewer profile"), sem subdiretorio
-// (AVATAR_FILE_RE); o tv3ws entrega o mesmo diretorio pela C.6.14.6.
+// Default avatar, palette and avatar file. The avatar field of the profile
+// is the NAME of a file of <USER_DATA_PATH>/thumbs (Table 7: "Path
+// indicating the file with the graphical representation of the viewer
+// profile"), without a subdirectory (AVATAR_FILE_RE).
 const fs = require('fs');
 const path = require('path');
 const { svgDocument, withSvgNamespace, svgDataUri, imageHtml } = require('../../html');
@@ -29,15 +29,14 @@ const AVATAR_COLORS = [
     { hex: '#7c6e4d', name: 'Marrom' }
 ].map(c => ({ ...c, svg: svgAvatar(c.hex) }));
 
-// Formato do nome (o mesmo da regra do avatar em infra/redis/esquema.json)
+// Format of the name.
 const AVATAR_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(svg|png|jpg|jpeg|webp)$/;
-// tipo de imagem pela extensao (a mesma tabela do tv3ws na C.6.14.6)
+// Image type by extension.
 const AVATAR_MIME = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
-// Teto do arquivo embutido na tela. O que o gestor grava cabe no corpo do POST
-// /profile/create (limite de 100 kB do express.json); arquivo maior foi posto
-// por fora e cai no padrao, para nao inchar o HTML da tela.
+// Maximum size of the file embedded in the screen; a larger file falls back
+// to the default.
 const MAX_AVATAR_BYTES = 1024 * 1024;
-// falha de leitura que equivale a "sem arquivo" (nao vai para o log)
+// Read failures that count as "no file" (not logged).
 const NOT_FOUND = new Set(['ENOENT', 'ENOTDIR', 'ELOOP', 'ENAMETOOLONG']);
 
 function thumbsDir() {
@@ -54,16 +53,17 @@ function avatarFileName(id) {
     return `${id}.svg`;
 }
 
-// SVG do POST /profile/create: texto que comeca por "<svg" e tem elemento
-// <svg>; ausente ou fora disso, o padrao. O arquivo gravado leva o xmlns (e
-// entregue como image/svg+xml pela C.6.14.6).
+// SVG of POST /profile/create: a text that starts with "<svg" and has an
+// <svg> element; absent or anything else, the default. The written file
+// carries the xmlns.
 function avatarSvg(value) {
     const doc = typeof value === 'string' && value.startsWith('<svg') ? withSvgNamespace(value) : '';
     return doc || svgDocument(DEFAULT_AVATAR_SVG);
 }
 
-// Grava <thumbs>/<id>.svg e devolve o nome (o valor do campo avatar). Nao
-// sobrescreve: arquivo (ou link) ja existente com esse nome e erro (flag wx).
+// Writes <thumbs>/<id>.svg and returns the name (the value of the avatar
+// field). Does not overwrite: an existing file (or link) with that name is
+// an error (flag wx).
 async function writeAvatarFile(id, svg) {
     const name = avatarFileName(id);
     if (!isAvatarFileName(name)) throw new Error(`id de perfil fora do formato do nome do arquivo do avatar: ${id}`);
@@ -73,7 +73,8 @@ async function writeAvatarFile(id, svg) {
     return name;
 }
 
-// Apaga <thumbs>/<nome>; nome fora do formato ou arquivo ausente devolve false
+// Deletes <thumbs>/<name>; a name out of format or a missing file returns
+// false.
 async function unlinkAvatarFile(name) {
     if (!isAvatarFileName(name)) return false;
     try {
@@ -85,15 +86,15 @@ async function unlinkAvatarFile(name) {
     }
 }
 
-// Apaga <thumbs>/<id>.svg (criacao que falhou depois de gravar o arquivo).
-// Avatar com outro nome nao foi posto pelo gestor e fica.
+// Deletes <thumbs>/<id>.svg (a creation that failed after writing the
+// file). An avatar with another name stays.
 function removeAvatarFile(id) {
     return unlinkAvatarFile(avatarFileName(id));
 }
 
-// URL data: do arquivo do avatar; '' se o nome estiver fora do formato, se o
-// arquivo nao existir (ou for link para fora do diretorio, ou nao for arquivo
-// comum, ou passar do teto) ou se o SVG nao tiver elemento <svg>.
+// data: URL of the avatar file; '' if the name is out of format, if the file
+// does not exist (or is a link outside the directory, or not a regular file,
+// or is above the limit) or if the SVG has no <svg> element.
 function avatarDataUri(name) {
     if (!isAvatarFileName(name)) return '';
     try {
@@ -112,10 +113,11 @@ function avatarDataUri(name) {
     }
 }
 
-// <img class="avatar"> com o arquivo do avatar em URL data: (sem arquivo, o
-// padrao). Embutido, e nao servido por rota do AoP: a rota entregaria o avatar
-// de qualquer perfil sem a restricao da Tabela C.75, que o tv3ws aplica, e o SVG
-// aberto como documento rodaria script na origem da pagina da TV.
+// <img class="avatar"> with the avatar file as a data: URL (without a file,
+// the default). Embedded, not served by a route of the AoP: a route would
+// serve the avatar of any profile without the restriction of Table C.75, and
+// the SVG opened as a document would run script on the origin of the TV
+// page.
 function avatarHtml(avatar) {
     const src = avatarDataUri(avatar) || svgDataUri(DEFAULT_AVATAR_SVG);
     return imageHtml(src, { class: 'avatar', alt: '' });

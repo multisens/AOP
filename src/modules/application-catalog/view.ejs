@@ -236,8 +236,9 @@
                 fetch('<%= basepath %>/profile');
             }
 
-            // o globalServiceId vem da emissora: sem o encodeURIComponent, "&",
-            // "#", "+" ou "%" nele cortariam ou trocariam o id do /select
+            // The globalServiceId comes from the broadcaster: without
+            // encodeURIComponent, "&", "#", "+" or "%" in it would cut or
+            // change the id of /select.
             function selectService(sid) {
                 fetch(`<%= basepath %>/select?id=${encodeURIComponent(sid)}`);
             }

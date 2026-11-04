@@ -1,7 +1,6 @@
 require('dotenv').config();
 
-// Fail-fast: env obrigatoria ausente encerra o boot (exit 1) logo no inicio,
-// em vez de erro confuso depois (ex: cliente MQTT em 'mqtt://undefined').
+// Fail-fast: a missing required env stops the boot (exit 1) at the start.
 function assertEnv(required) {
     const missing = required.filter(k => !process.env[k] || String(process.env[k]).trim() === '');
     if (missing.length) {
@@ -12,7 +11,8 @@ function assertEnv(required) {
 }
 assertEnv(['MQTT_HOST', 'USER_DATA_PATH', 'REDIS_HOST']);
 
-// APPS_DOMAIN e AOP_PUBLIC_PORT (./app-hosts.js): valor invalido encerra o boot.
+// APPS_DOMAIN and AOP_PUBLIC_PORT (./app-hosts.js): an invalid value stops
+// the boot.
 const appHosts = require('./app-hosts');
 let APPS;
 try {
@@ -22,8 +22,8 @@ try {
     process.exit(1);
 }
 
-// MQTT por WebSocket da pagina da TV: entra pela porta do AoP, em /mqtt, e
-// segue para ws://${MQTT_HOST}:${MQTT_WS_PORT} (./mqtt-ws.js).
+// MQTT over WebSocket of the TV page: comes in through the AoP port, on
+// /mqtt, and goes on to ws://${MQTT_HOST}:${MQTT_WS_PORT} (./mqtt-ws.js).
 const mqttWs = require('./mqtt-ws');
 let MQTT_WS;
 try {
@@ -48,9 +48,10 @@ const mod_btpapp = require('./modules/bootstrap-application');
 
 const app = express();
 
-// Host de aplicacao (<rotulo>.<APPS_DOMAIN>) vai ao proxy da aplicacao em
-// execucao; sem aplicacao, 404. Montado primeiro: um host de aplicacao nunca
-// serve as paginas nem os arquivos do AoP, e o corpo chega intacto ao alvo.
+// An application host (<label>.<APPS_DOMAIN>) goes to the proxy of the
+// running application; without one, 404. Mounted first: an application host
+// never serves the pages or the files of the AoP, and the body reaches the
+// target intact.
 app.use(appHosts.appHostProxy({ cfg: APPS, lookup: core.getGraphicsAppByLabel }));
 console.log(`[apps] aplicacoes de emissora em http://<app>.${APPS.domain}` + (APPS.port === 80 ? '' : `:${APPS.port}`));
 
@@ -73,13 +74,13 @@ app.use(core.GUI.app_catalogue, mod_appcat);
 app.use(core.GUI.bootstrap_app, mod_btpapp);
 app.use('/', mod_disp);
 
-// /graphicsAppProxy no host do AoP: 302 para o mesmo caminho no host da
-// aplicacao em execucao; sem aplicacao, 404 (./app-hosts.js).
+// /graphicsAppProxy on the host of the AoP: 302 to the same path on the
+// host of the running application; without one, 404 (./app-hosts.js).
 app.use('/graphicsAppProxy', appHosts.legacyGraphicsRedirect({ getApp: core.getGraphicsApp }));
 
-// B.6.3: o proxy preserva os metadados de cache da origem (ETag,
-// Last-Modified, Expires). Playlist ao vivo declara a propria validade na
-// ORIGEM (simulador); nao des-cachear aqui.
+// B.6.3: the proxy keeps the cache metadata of the origin (ETag,
+// Last-Modified, Expires). A live playlist declares its own validity at the
+// origin; it is not made uncacheable here.
 const proxyStream = createProxyMiddleware({
     target: '',
     changeOrigin: true,
@@ -98,15 +99,15 @@ const proxyStream = createProxyMiddleware({
 });
 app.use('/videoStreamProxy', proxyStream);
 
-// excecao em rota (ex.: Redis fora do ar) -> 404 {error:200} (C.3.2)
+// An exception in a route (e.g. Redis down) becomes 404 {error:200} (C.3.2).
 app.use(require('./http-error').platformErrorHandler);
 
 const server = app.listen(_PORT, () => {
     console.log(`AoP running on port: ${_PORT}`);
 });
 
-// Upgrade WebSocket: so /mqtt no host do AoP vai ao broker; o resto (outro
-// caminho, host de aplicacao) responde 404.
+// WebSocket upgrade: only /mqtt on the host of the AoP goes to the broker;
+// anything else (another path, an application host) answers 404.
 server.on('upgrade', mqttWs.mqttWsUpgrade({ apps: APPS, mqtt: MQTT_WS }));
 console.log(`[mqtt-ws] MQTT por WebSocket em ws://<host do AoP>${mqttWs.MQTT_WS_PATH} -> ${MQTT_WS.target}`);
 

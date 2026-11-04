@@ -2,11 +2,11 @@ const core = require('../../core');
 const { avatarHtml } = require('../profile-manager/avatar');
 const { escapeHtml, svgImageHtml, cssHexColor } = require('../../html');
 
-// Cores do <style> da view: so passa o formato (cssHexColor); fora dele, a
-// paleta das outras telas do AoP. BAM, Tabela 6: "Hexadecimal RGB color code
-// with notation using a leading number sign (#)" -> #RRGGBB. A cor do genero e
-// campo do formato provisorio de SLS do testbed (na ABNT NBR 25602 o Genre so
-// tem href): #RRGGBB ou #RRGGBBAA, o que o bcast publica ("#07812cff").
+// Colors of the <style> of the view: only the format passes (cssHexColor);
+// outside it, the palette of the other AoP screens. BAM, Table 6:
+// "Hexadecimal RGB color code with notation using a leading number sign (#)",
+// so #RRGGBB. The genre color, a field of the provisional SLS format of the
+// testbed: #RRGGBB or #RRGGBBAA.
 const DEFAULT_BACKGROUND_COLOR = '#282828';
 const DEFAULT_FOREGROUND_COLOR = '#c8c8c8';
 const DEFAULT_GENRE_COLOR = 'transparent';
@@ -31,8 +31,8 @@ function openBootstrapApp(mode) {
 function bootstrapAppData() {
 	let bam = core.getCurrentService().bam;
 	
-	// appIconHtml (<img> com URL data:) vai para <%- %>; os demais campos, para
-	// <%= %>, que escapa.
+	// appIconHtml (<img> with a data: URL) goes to <%- %>; the other fields to
+	// <%= %>, which escapes.
 	return {
 		appName: bam.appName,
 		appIconHtml: svgImageHtml(bam.appIcon, { alt: '' }, `appIcon do BAM de ${bam.globalServiceId}`),
@@ -76,8 +76,8 @@ function closeBootstrapApp(gui) {
 	core.unsetCurrentService();
 }
 
-// Devolve a promessa do registro da origem associada. Sem BALD ainda, o inicio
-// fica para o handler (MQTT), que loga a falha.
+// Returns the promise of the registration of the associated origin. Without
+// a BALD yet, the start is left to the MQTT handler, which logs a failure.
 function fullscreen() {
 	core.setDisplayGui('');
 	core.setVideoSize();

@@ -194,7 +194,7 @@
                 fetch(`<%= basepath %>/select?id=${encodeURIComponent(uid)}`);
             }
 
-            // remocao: { id, from (foco a devolver), sent }
+            // Removal: { id, from (focus to give back), sent }.
             let pendingRemoval = null;
 
             function focusOn(id) {
@@ -202,7 +202,7 @@
                 $(`#${id}`).addClass('focused');
             }
 
-            // o nickname entra por texto, nunca como HTML
+            // The nickname goes in as text, never as HTML.
             function confirmRemoval(uid) {
                 const from = $('.focused');
                 pendingRemoval = { id: uid, from: from.attr('id'), sent: false };
@@ -219,7 +219,8 @@
                 pendingRemoval = null;
             }
 
-            // removido, a plataforma volta ao seletor de perfil e recarrega esta tela
+            // Removed, the platform goes back to the profile chooser and
+            // reloads this screen.
             function removeProfile() {
                 if (!pendingRemoval || pendingRemoval.sent) return;
                 pendingRemoval.sent = true;
@@ -230,8 +231,8 @@
                 })
                 .then(async (response) => {
                     if (response.ok) return;
-                    // 400 traz {error: mensagem}; falha da plataforma traz
-                    // {error: 200, description} (formato C.3.2)
+                    // 400 carries {error: message}; a platform failure carries
+                    // {error: 200, description} (C.3.2 format).
                     const data = await response.json().catch(() => ({}));
                     const msg = typeof data.error === 'string' ? data.error : data.description;
                     throw new Error(msg || ('HTTP ' + response.status));
